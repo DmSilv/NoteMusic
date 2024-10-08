@@ -1,0 +1,17 @@
+# React Native
+node_modules/
+ios/Pods/
+android/.gradle/
+android/app/build/
+android/app/src/main/res/mipmap-*
+*.log
+*.lock
+*.iml
+*.hprof
+*.orig
+*.swp
+.DS_Store
+.vscode/
+.idea/
+.expo/
+.expo-shared/
