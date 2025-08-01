@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NavigationProp } from '@react-navigation/native';
 import MenuBottom from '../Components/MenuBottom';
-import PrimaryButton from '../Components/Button/PrimaryButton';
-import SkeletonHome from './SkeletonHome';
 
 const user = {
   name: 'Danilo Silva',
@@ -78,16 +76,6 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
   const levelBadge = getLevelBadge(user.level);
   const greeting = getGreeting(user);
   const aulasRestantes = user.totalLessons - user.completedLessons;
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading) {
-    return <SkeletonHome />;
-  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>

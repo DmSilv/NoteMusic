@@ -1,159 +1,106 @@
-import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView } from 'react-native';
-import React, { useState, useEffect, useRef } from 'react';
-import select_level from '../../../assets/images/select_level.png';
-import PickerComponent from '../Components/Form/Picker/Picker';
-import { NavigationProp } from '@react-navigation/native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import PrimaryButton from '../Components/Button/PrimaryButton';
 
-interface Props {
-  navigation: NavigationProp<any>;
-}
-export default function SelectLevelPerson({ navigation }: Props) {
-  const scrollViewRef = useRef<ScrollView>(null); // Referência para o ScrollView
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [selectedCategory, setSelectedCategory] = useState('Aprendiz (Iniciante)');
+const steps = [
+  {
+    question: 'Qual seu maior objetivo com teoria musical?',
+    options: [
+      'Ler partituras com facilidade',
+      'Melhorar percepção rítmica',
+      'Se preparar para provas/vestibulares',
+      'Desafiar meus conhecimentos',
+      'Outro',
+    ],
+  },
+  {
+    question: 'Qual seu nível de familiaridade com teoria musical?',
+    options: [
+      'Nunca estudei',
+      'Sei o básico (notas, figuras)',
+      'Já estudei escalas, intervalos, etc.',
+      'Avançado (harmonia, análise, etc)',
+    ],
+  },
+  {
+    question: 'O que você mais gosta de praticar?',
+    options: [
+      'Leitura de partituras',
+      'Ditado rítmico',
+      'Identificação de acordes',
+      'Quiz de teoria geral',
+    ],
+  },
+];
 
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      setKeyboardVisible(true);
-      scrollViewRef.current?.scrollTo({ y: 500, animated: true }); // Ajuste a rolagem conforme necessário
-    });
+export default function SelectLevelPerson({ navigation }) {
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<string[]>([]);
 
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardVisible(false);
-    });
+  const handleSelect = (option: string) => {
+    const newAnswers = [...answers];
+    newAnswers[step] = option;
+    setAnswers(newAnswers);
+  };
 
-    return () => {
-      keyboardDidHideListener.remove();
-      keyboardDidShowListener.remove();
-    };
-  }, []);
-
-  const categories = [
-    { label: 'Aprendiz (Iniciante)', value: 'Aprendiz (Iniciante)' },
-    { label: 'Virtuoso (Intermediário)', value: 'Virtuoso (Intermediário)' },
-    { label: 'Maestro (Avançado)', value: 'Maestro (Avançado)' },
-  ];
-
-  const handlePressProfile = () => {
-    navigation.navigate('ProfileHome');
+  const handleNext = () => {
+    if (step < steps.length - 1) setStep(step + 1);
+    else {
+      // Salvar perfil, dar feedback e navegar para Home
+      alert('Parabéns! Você já ganhou seu primeiro troféu: “Primeiro Passo” 🏅');
+      navigation.replace('ProfileHome');
+    }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0} // Ajuste de deslocamento para iOS
-    >
-      <ScrollView
-        ref={scrollViewRef}
-        contentContainerStyle={styles.scrollViewContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View
-          style={[
-            styles.containerForm,
-            { borderTopLeftRadius: keyboardVisible ? 0 : 40, borderTopRightRadius: keyboardVisible ? 0 : 40 }
-          ]}
-        >
-          <View style={styles.containerImage}>
-            <Image source={select_level} style={styles.image} />
-          </View>
-
-          <View>
-            <Text style={styles.Title}>Qual é o Seu Nível Musical?</Text>
-            <Text style={styles.SubTitle}>Diga-nos onde você se encontra no seu caminho musical. Escolha o nível que melhor reflete suas habilidades e experiência!</Text>
-            <PickerComponent
-              selectedValue={selectedCategory}
-              onValueChange={setSelectedCategory}
-              items={categories}
-            />
-          </View>
-          <TouchableOpacity onPress={handlePressProfile} style={[styles.button, styles.primaryButton, { width: windowWidth * 0.85 }]}>
-            <Text style={styles.buttonText}>Confirmar e Concluir</Text>
-          </TouchableOpacity>
+    <View style={styles.container}>
+      {/* Barra de progresso */}
+      {Platform.OS === 'android' ? (
+        <View style={styles.progressBarContainer}>
+          <View style={[styles.progressBar, { width: `${((step + 1) / steps.length) * 100}%` }]} />
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      ) : null}
+      <Text style={styles.stepText}>Passo {step + 1} de {steps.length}</Text>
+      <Text style={styles.question}>{steps[step].question}</Text>
+      {steps[step].options.map(option => (
+        <TouchableOpacity
+          key={option}
+          style={[
+            styles.option,
+            answers[step] === option && styles.optionSelected,
+          ]}
+          onPress={() => handleSelect(option)}
+        >
+          <Text style={styles.optionText}>{option}</Text>
+        </TouchableOpacity>
+      ))}
+      <PrimaryButton
+        title={step < steps.length - 1 ? 'Próximo' : 'Finalizar'}
+        onPress={handleNext}
+        disabled={!answers[step]}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'white',
+  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#F8F9FA' },
+  progressBarContainer: {
+    height: 8,
     width: '100%',
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 16,
+    overflow: 'hidden',
   },
-  containerForm: {
-    flex: 1,
-    backgroundColor: 'white',
-    width: '100%',
-    height: '100%',
-    paddingHorizontal: 24,
+  progressBar: {
+    height: 8,
+    backgroundColor: '#0087D3',
+    borderRadius: 4,
   },
-  scrollViewContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  Title: {
-    color: '#0087D3',
-    fontSize: 24,
-    fontFamily: 'Roboto',
-    marginTop: 4,
-  },
-  SubTitle: {
-    color: '#A3A3A3',
-    fontSize: 13,
-    fontFamily: 'Roboto-Light',
-    marginTop: 4,
-  },
-  picker: {
-    height: 48,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    backgroundColor: '#F1F1F1',
-  },
-  label: {
-    fontSize: 14,
-    marginBottom: 4,
-    color: '#A3A3A3',
-    marginTop: 16,
-  },
-  button: {
-    height: 53,
-    borderRadius: 100,
-    justifyContent: 'center',
-    marginTop: 100,
-  },
-  primaryButton: {
-    backgroundColor: '#0A8CD6',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    marginBottom: 25,
-  },
-  buttonText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: 'white',
-  },
-  image: {
-    width: '100%',
-    height: 270,
-  },
-  containerImage: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    marginTop: '50%',
-    marginBottom: '20%',
-  },
+  stepText: { color: '#0087D3', fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
+  question: { fontSize: 20, fontWeight: 'bold', marginBottom: 18, color: '#232323' },
+  option: { backgroundColor: '#E3F2FD', borderRadius: 12, padding: 16, marginBottom: 10 },
+  optionSelected: { borderWidth: 2, borderColor: '#0087D3', backgroundColor: '#BBDEFB' },
+  optionText: { fontSize: 16, color: '#232323' },
 });
