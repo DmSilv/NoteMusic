@@ -176,12 +176,11 @@ interface ModuleCategoryProps {
                     text: 'Sair',
                     style: 'destructive',
                     onPress: async () => {
-                        try {
-                            await logout();
-                            navigation.navigate('LoginScreen');
-                        } catch (error) {
-                            Alert.alert('Erro', 'Não foi possível fazer logout. Tente novamente.');
-                        }
+                        await logout();
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'SelectionScreen' }],
+                        });
                     },
                 },
             ]
