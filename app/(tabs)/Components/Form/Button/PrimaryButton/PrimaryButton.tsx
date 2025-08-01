@@ -1,13 +1,44 @@
 import React from 'react';
-import { TouchableOpacity, Text } from 'react-native';
-import styles from './Style'; // Importando o estilo
+import { TouchableOpacity, Text, ViewStyle, TextStyle } from 'react-native';
+import styles from './Style';
 
-const ButtonComponent = ({ title, onPress, styleWidth }) => {
+interface PrimaryButtonProps {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  styleWidth?: ViewStyle;
+  styleText?: TextStyle;
+  loading?: boolean;
+}
+
+const PrimaryButton: React.FC<PrimaryButtonProps> = ({ 
+  title, 
+  onPress, 
+  disabled = false, 
+  styleWidth,
+  styleText,
+  loading = false 
+}) => {
   return (
-    <TouchableOpacity style={styles.button} onPress={onPress}>
-      <Text style={[styles.buttonText, styleWidth]}>{title}</Text>
+    <TouchableOpacity 
+      style={[
+        styles.button, 
+        disabled && styles.buttonDisabled,
+        styleWidth
+      ]} 
+      onPress={onPress}
+      disabled={disabled || loading}
+      activeOpacity={0.8}
+    >
+      <Text style={[
+        styles.buttonText, 
+        disabled && styles.buttonTextDisabled,
+        styleText
+      ]}>
+        {loading ? 'Carregando...' : title}
+      </Text>
     </TouchableOpacity>
   );
 };
 
-export default ButtonComponent;
+export default PrimaryButton;
