@@ -2,156 +2,96 @@ import { scale, verticalScale } from '../utils/responsive';
 
 // Design System - Typography
 export const typography = {
-  // Font Families
+  // Font families
   fontFamily: {
-    primary: {
-      light: 'Roboto-Light',
-      regular: 'Roboto-Regular',
-      medium: 'Roboto-Medium',
-      bold: 'Roboto-Bold',
-    },
-    secondary: {
-      light: 'Poppins-Light',
-      regular: 'Poppins-Regular',
-      medium: 'Poppins-Medium',
-      bold: 'Poppins-Bold',
-      semiBold: 'Poppins-SemiBold',
-    },
+    primary: 'Poppins',
+    secondary: 'Roboto',
+    mono: 'SpaceMono',
   },
-
-  // Font Sizes
+  
+  // Font sizes
   fontSize: {
-    xs: scale(12),
-    sm: scale(14),
-    base: scale(16),
-    lg: scale(18),
-    xl: scale(20),
-    '2xl': scale(24),
-    '3xl': scale(30),
-    '4xl': scale(36),
-    '5xl': scale(48),
+    xs: 12,
+    sm: 14,
+    md: 16,
+    lg: 18,
+    xl: 20,
+    xxl: 24,
+    xxxl: 32,
+    display: 48,
   },
-
-  // Line Heights
-  lineHeight: {
-    tight: 1.2,
-    normal: 1.4,
-    relaxed: 1.6,
-    loose: 1.8,
-  },
-
-  // Font Weights
+  
+  // Font weights
   fontWeight: {
+    thin: '100',
     light: '300',
-    normal: '400',
+    regular: '400',
     medium: '500',
     semiBold: '600',
     bold: '700',
     extraBold: '800',
+    black: '900',
   },
-
-  // Text Styles
-  textStyles: {
-    // Headings
+  
+  // Line heights
+  lineHeight: {
+    tight: 1.2,
+    normal: 1.5,
+    relaxed: 1.8,
+  },
+  
+  // Text styles
+  text: {
     h1: {
-      fontSize: scale(36),
-      fontFamily: 'Poppins-Bold',
+      fontSize: 32,
+      fontWeight: '700',
       lineHeight: 1.2,
-      color: '#232323',
+      fontFamily: 'Poppins',
     },
     h2: {
-      fontSize: scale(30),
-      fontFamily: 'Poppins-Bold',
+      fontSize: 24,
+      fontWeight: '600',
       lineHeight: 1.3,
-      color: '#232323',
+      fontFamily: 'Poppins',
     },
     h3: {
-      fontSize: scale(24),
-      fontFamily: 'Poppins-SemiBold',
-      lineHeight: 1.3,
-      color: '#232323',
-    },
-    h4: {
-      fontSize: scale(20),
-      fontFamily: 'Poppins-Medium',
+      fontSize: 20,
+      fontWeight: '600',
       lineHeight: 1.4,
-      color: '#232323',
+      fontFamily: 'Poppins',
     },
-    h5: {
-      fontSize: scale(18),
-      fontFamily: 'Poppins-Medium',
-      lineHeight: 1.4,
-      color: '#232323',
-    },
-    h6: {
-      fontSize: scale(16),
-      fontFamily: 'Poppins-Medium',
-      lineHeight: 1.4,
-      color: '#232323',
-    },
-
-    // Body Text
-    body1: {
-      fontSize: scale(16),
-      fontFamily: 'Roboto-Regular',
-      lineHeight: 1.6,
-      color: '#545454',
-    },
-    body2: {
-      fontSize: scale(14),
-      fontFamily: 'Roboto-Regular',
+    body: {
+      fontSize: 16,
+      fontWeight: '400',
       lineHeight: 1.5,
-      color: '#545454',
+      fontFamily: 'Roboto',
     },
-    body3: {
-      fontSize: scale(12),
-      fontFamily: 'Roboto-Regular',
-      lineHeight: 1.4,
-      color: '#545454',
-    },
-
-    // Caption
     caption: {
-      fontSize: scale(12),
-      fontFamily: 'Roboto-Light',
+      fontSize: 14,
+      fontWeight: '400',
       lineHeight: 1.4,
-      color: '#A3A3A3',
+      fontFamily: 'Roboto',
     },
-
-    // Button Text
     button: {
-      fontSize: scale(16),
-      fontFamily: 'Roboto-Bold',
+      fontSize: 16,
+      fontWeight: '600',
       lineHeight: 1.2,
-      color: '#FFFFFF',
-    },
-    buttonSmall: {
-      fontSize: scale(14),
-      fontFamily: 'Roboto-Bold',
-      lineHeight: 1.2,
-      color: '#FFFFFF',
-    },
-
-    // Label
-    label: {
-      fontSize: scale(14),
-      fontFamily: 'Roboto-Medium',
-      lineHeight: 1.4,
-      color: '#232323',
+      fontFamily: 'Poppins',
     },
   },
 };
 
 // Typography utilities
-export const getTextStyle = (styleName: string) => {
-  return typography.textStyles[styleName as keyof typeof typography.textStyles] || typography.textStyles.body1;
+export const getTextStyle = (style: keyof typeof typography.text) => {
+  return typography.text[style];
 };
 
-export const createTextStyle = (fontSize: number, fontFamily: string, color: string, lineHeight?: number) => {
+export const createTextStyle = (overrides: Partial<typeof typography.text.body>) => {
   return {
-    fontSize: scale(fontSize),
-    fontFamily,
-    color,
-    lineHeight: lineHeight || 1.4,
+    ...typography.text.body,
+    ...overrides,
   };
-}; 
+};
+
+// Default export para evitar warnings de rota
+export default typography; 

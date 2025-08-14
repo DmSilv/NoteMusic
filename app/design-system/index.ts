@@ -16,21 +16,14 @@ import {
 } from '../utils/responsive';
 
 // Design System - Main Export
-export { colors, getColor } from './colors';
-export { typography, getTextStyle, createTextStyle } from './typography';
-export { spacing, getSpacing, createSpacing, createMargin } from './spacing';
-export { 
-  scale, 
-  verticalScale, 
-  moderateScale, 
-  screenWidth, 
-  screenHeight,
-  isSmallDevice,
-  isMediumDevice,
-  isLargeDevice,
-  fontSize,
-  borderRadius
-} from '../utils/responsive';
+export * from './colors';
+export * from './spacing';
+export * from './typography';
+
+// Default export para evitar warnings de rota
+export { default as colors } from './colors';
+export { default as spacing } from './spacing';
+export { default as typography } from './typography';
 
 // Design System Theme
 export const theme = {

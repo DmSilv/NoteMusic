@@ -1,300 +1,640 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView } from 'react-native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
 import BackButton from '../Components/BackButton/BackButton';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { useAuth } from '../../contexts/AuthContext';
+import quizService from '../../../services/quizService';
+import AppStyles, { AppColors, AppSpacing, AppTypography, AppButtonStyles, AppButtonTextStyles } from '../../../constants/AppStyles';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 interface QuizResultsProps {
     navigation: StackNavigationProp<any>;
-    route: {
-        params: {
-            score: number;
-            total: number;
-        };
-    };
+    route: any;
+}
+
+interface QuizAnswer {
+    questionIndex: number;
+    selectedAnswer: number;
+    isCorrect: boolean;
+    points: number;
 }
 
 const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
-    const { score, total } = route.params;
-    const percentage = (score / total) * 100;
+    const { user } = useAuth();
+    const {
+        totalQuestions = 0,
+        correctAnswers = 0,
+        wrongAnswers = 0,
+        percentage = 0,
+        totalScore = 0,
+        timeSpent = 0,
+        quizTitle = 'Quiz',
+        answers = [],
+        feedback = 'Quiz finalizado',
+        quizId = '',
+        moduleId = '',
+        isDailyChallenge = false
+    } = route.params || {};
 
-    const getPerformanceMessage = () => {
+    // Animações
+    const fadeAnim = new Animated.Value(0);
+    const scaleAnim = new Animated.Value(0.8);
+    const progressAnim = new Animated.Value(0);
+
+    useEffect(() => {
+        // Animação de entrada
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 600,
+                useNativeDriver: true,
+            }),
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                tension: 100,
+                friction: 8,
+                useNativeDriver: true,
+            }),
+        ]).start();
+
+        // Animação da barra de progresso
+        setTimeout(() => {
+            Animated.timing(progressAnim, {
+                toValue: percentage / 100,
+                duration: 1500,
+                useNativeDriver: false,
+            }).start();
+        }, 300);
+
+        // Submeter resultados para o backend se usuário autenticado
+        if (user && quizId && answers.length > 0) {
+            submitQuizResults();
+        }
+    }, []);
+
+    const submitQuizResults = async () => {
+        try {
+            // Converter respostas para formato esperado pelo backend
+            const formattedAnswers = answers.map((answer: QuizAnswer) => answer.selectedAnswer);
+            
+            await quizService.submitQuiz({
+                quizId,
+                answers: formattedAnswers,
+                timeSpent
+            });
+        } catch (error) {
+            console.log('Erro ao submeter resultados (não crítico):', error);
+        }
+    };
+
+    const getPerformanceData = () => {
         if (percentage >= 90) {
             return {
                 title: 'Excelente!',
-                message: 'Você demonstrou um conhecimento excepcional!',
+                message: '🏆 Você demonstrou domínio excepcional do conteúdo!',
                 color: '#4CAF50',
-                emoji: '🎉'
+                emoji: '🎉',
+                grade: 'A+'
             };
         } else if (percentage >= 80) {
             return {
                 title: 'Muito Bom!',
-                message: 'Você tem um conhecimento sólido sobre o assunto.',
+                message: '⭐ Você tem uma boa compreensão do material.',
                 color: '#4CAF50',
-                emoji: '👏'
+                emoji: '👏',
+                grade: 'A'
             };
-        } else if (percentage >= 60) {
+        } else if (percentage >= 70) {
             return {
-                title: 'Bom Trabalho!',
-                message: 'Continue estudando para melhorar ainda mais.',
+                title: 'Bom!',
+                message: '📚 Bom trabalho! Continue estudando para melhorar.',
                 color: '#FF9800',
-                emoji: '👍'
+                emoji: '👍',
+                grade: 'B'
+            };
+        } else if (percentage >= 50) {
+            return {
+                title: 'Satisfatório',
+                message: '💪 Continue se esforçando! Você está no caminho certo.',
+                color: '#FF5722',
+                emoji: '📖',
+                grade: 'C'
             };
         } else {
             return {
-                title: 'Continue Praticando!',
-                message: 'A teoria musical requer dedicação e prática constante.',
+                title: 'Precisa Melhorar',
+                message: '🔄 A prática leva à perfeição! Não desista.',
                 color: '#F44336',
-                emoji: '💪'
+                emoji: '💪',
+                grade: 'D'
             };
         }
     };
 
-    const performance = getPerformanceMessage();
+    const formatTime = (seconds: number) => {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    };
 
+    const performance = getPerformanceData();
+
+    // Funções de navegação melhoradas e consistentes
     const handleBackToHome = () => {
-        navigation.navigate('ProfileHome');
+        console.log('🏠 Voltando ao menu principal');
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'ProfileHome' }],
+        });
     };
 
     const handleRetryQuiz = () => {
-        navigation.navigate('Quiz');
+        console.log('🔄 Tentando novamente o quiz');
+        navigation.goBack(); // Volta para a tela do quiz atual
+    };
+
+    const handleViewModules = () => {
+        console.log('📚 Navegando para módulos');
+        navigation.navigate('ModuleCategory');
+    };
+
+    const handleLibraryAccess = () => {
+        console.log('📖 Acessando biblioteca de conteúdo');
+        // Função adicional para acesso à biblioteca
+        navigation.navigate('ModuleCategory');
     };
 
     return (
         <View style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                <BackButton onPress={() => navigation.goBack()} />
-                <Text style={styles.headerTitle}>Resultados</Text>
+                <BackButton onPress={() => navigation.navigate('ProfileHome')} />
+                <Text style={styles.headerTitle}>Resultados do Quiz</Text>
             </View>
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Score Card */}
-                <View style={styles.scoreCard}>
+                {/* Card Principal de Resultado */}
+                <Animated.View 
+                    style={[
+                        styles.mainResultCard,
+                        { 
+                            opacity: fadeAnim,
+                            transform: [{ scale: scaleAnim }]
+                        }
+                    ]}
+                >
                     <Text style={styles.emoji}>{performance.emoji}</Text>
+                    <Text style={[styles.gradeText, { color: performance.color }]}>
+                        {performance.grade}
+                    </Text>
                     <Text style={[styles.performanceTitle, { color: performance.color }]}>
                         {performance.title}
                     </Text>
-                    <Text style={styles.performanceMessage}>
+                    <Text style={styles.percentageText}>
+                        {percentage}%
+                    </Text>
+                    <Text style={styles.feedbackText}>
                         {performance.message}
                     </Text>
-                </View>
+                </Animated.View>
 
-                {/* Score Details */}
-                <View style={styles.scoreDetails}>
-                    <View style={styles.scoreRow}>
-                        <Text style={styles.scoreLabel}>Pontuação:</Text>
-                        <Text style={styles.scoreValue}>{score}/{total}</Text>
+                {/* Métricas Detalhadas */}
+                <Animated.View style={[styles.metricsCard, { opacity: fadeAnim }]}>
+                    <Text style={styles.metricsTitle}>📊 Métricas Detalhadas</Text>
+                    
+                    <View style={styles.metricRow}>
+                        <View style={styles.metricItem}>
+                            <Text style={styles.metricNumber}>{totalQuestions}</Text>
+                            <Text style={styles.metricLabel}>Total de Questões</Text>
+                        </View>
+                        <View style={styles.metricItem}>
+                            <Text style={[styles.metricNumber, { color: '#4CAF50' }]}>{correctAnswers}</Text>
+                            <Text style={styles.metricLabel}>Acertos</Text>
+                        </View>
+                        <View style={styles.metricItem}>
+                            <Text style={[styles.metricNumber, { color: '#F44336' }]}>{wrongAnswers}</Text>
+                            <Text style={styles.metricLabel}>Erros</Text>
+                        </View>
                     </View>
-                    <View style={styles.scoreRow}>
-                        <Text style={styles.scoreLabel}>Percentual:</Text>
-                        <Text style={styles.scoreValue}>{percentage.toFixed(0)}%</Text>
-                    </View>
-                    <View style={styles.scoreRow}>
-                        <Text style={styles.scoreLabel}>Questões Corretas:</Text>
-                        <Text style={styles.scoreValue}>{score}</Text>
-                    </View>
-                    <View style={styles.scoreRow}>
-                        <Text style={styles.scoreLabel}>Questões Incorretas:</Text>
-                        <Text style={styles.scoreValue}>{total - score}</Text>
-                    </View>
-                </View>
 
-                {/* Progress Bar */}
-                <View style={styles.progressContainer}>
-                    <View style={styles.progressBarBackground}>
-                        <View 
-                            style={[
-                                styles.progressBar, 
-                                { 
-                                    width: `${percentage}%`,
-                                    backgroundColor: performance.color
-                                }
-                            ]} 
-                        />
+                    <View style={styles.additionalMetrics}>
+                        <View style={styles.additionalMetricRow}>
+                            <Text style={styles.additionalMetricLabel}>Pontuação Total:</Text>
+                            <Text style={styles.additionalMetricValue}>{totalScore} pontos</Text>
+                        </View>
+                        <View style={styles.additionalMetricRow}>
+                            <Text style={styles.additionalMetricLabel}>Tempo Gasto:</Text>
+                            <Text style={styles.additionalMetricValue}>{formatTime(timeSpent)}</Text>
+                        </View>
+                        <View style={styles.additionalMetricRow}>
+                            <Text style={styles.additionalMetricLabel}>Média de Tempo:</Text>
+                            <Text style={styles.additionalMetricValue}>
+                                {totalQuestions > 0 ? formatTime(Math.floor(timeSpent / totalQuestions)) : '0:00'} por questão
+                            </Text>
+                        </View>
+                        {isDailyChallenge && (
+                            <View style={styles.additionalMetricRow}>
+                                <Text style={styles.additionalMetricLabel}>Tipo:</Text>
+                                <Text style={[styles.additionalMetricValue, { color: '#007AFF' }]}>
+                                    🌟 Desafio Diário
+                                </Text>
+                            </View>
+                        )}
                     </View>
-                </View>
+                </Animated.View>
 
-                {/* Tips */}
-                <View style={styles.tipsContainer}>
-                    <Text style={styles.tipsTitle}>💡 Dicas para Melhorar</Text>
-                    <View style={styles.tipItem}>
-                        <Text style={styles.tipText}>• Revise os conceitos básicos regularmente</Text>
+                {/* Barra de Progresso Animada */}
+                <Animated.View style={[styles.progressCard, { opacity: fadeAnim }]}>
+                    <Text style={styles.progressTitle}>Desempenho Visual</Text>
+                    <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBarBackground}>
+                            <Animated.View 
+                                style={[
+                                    styles.progressBar,
+                                    {
+                                        width: progressAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: ['0%', '100%'],
+                                        }),
+                                        backgroundColor: performance.color
+                                    }
+                                ]}
+                            />
+                        </View>
+                        <Text style={styles.progressText}>{percentage}%</Text>
                     </View>
-                    <View style={styles.tipItem}>
-                        <Text style={styles.tipText}>• Pratique com exercícios diários</Text>
+                    
+                    {/* Indicadores de Performance */}
+                    <View style={styles.performanceIndicators}>
+                        <View style={[styles.indicator, percentage >= 90 && styles.activeIndicator]}>
+                            <Text style={styles.indicatorText}>90%+</Text>
+                            <Text style={styles.indicatorLabel}>Excelente</Text>
+                        </View>
+                        <View style={[styles.indicator, percentage >= 70 && percentage < 90 && styles.activeIndicator]}>
+                            <Text style={styles.indicatorText}>70%+</Text>
+                            <Text style={styles.indicatorLabel}>Bom</Text>
+                        </View>
+                        <View style={[styles.indicator, percentage >= 50 && percentage < 70 && styles.activeIndicator]}>
+                            <Text style={styles.indicatorText}>50%+</Text>
+                            <Text style={styles.indicatorLabel}>Regular</Text>
+                        </View>
+                        <View style={[styles.indicator, percentage < 50 && styles.activeIndicator]}>
+                            <Text style={styles.indicatorText}>0%+</Text>
+                            <Text style={styles.indicatorLabel}>Melhorar</Text>
+                        </View>
                     </View>
-                    <View style={styles.tipItem}>
-                        <Text style={styles.tipText}>• Ouça diferentes tipos de música</Text>
-                    </View>
-                    <View style={styles.tipItem}>
-                        <Text style={styles.tipText}>• Use aplicativos de teoria musical</Text>
-                    </View>
-                </View>
+                </Animated.View>
 
-                {/* Action Buttons */}
-                <View style={styles.actionButtons}>
+                {/* Detalhes das Respostas */}
+                {answers.length > 0 && (
+                    <Animated.View style={[styles.answersCard, { opacity: fadeAnim }]}>
+                        <Text style={styles.answersTitle}>📝 Detalhes das Respostas</Text>
+                        {answers.map((answer: QuizAnswer, index: number) => (
+                            <View key={index} style={styles.answerItem}>
+                                <View style={styles.answerHeader}>
+                                    <Text style={styles.questionNumber}>Questão {answer.questionIndex + 1}</Text>
+                                    <View style={[
+                                        styles.answerStatus,
+                                        { backgroundColor: answer.isCorrect ? '#4CAF50' : '#F44336' }
+                                    ]}>
+                                        <Text style={styles.answerStatusText}>
+                                            {answer.isCorrect ? '✓' : '✗'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.answerPoints}>
+                                    +{answer.points} pontos
+                                </Text>
+                            </View>
+                        ))}
+                    </Animated.View>
+                )}
+
+                {/* Botões de Ação - Padronizados e Funcionais */}
+                <Animated.View style={[styles.actionButtons, { opacity: fadeAnim }]}>
+                    {/* Botão Principal - Voltar ao Menu */}
                     <TouchableOpacity 
-                        style={[styles.button, styles.retryButton]} 
-                        onPress={handleRetryQuiz}
+                        style={[styles.button, styles.primaryButton]} 
+                        onPress={handleBackToHome}
+                        activeOpacity={0.8}
                     >
-                        <Text style={styles.retryButtonText}>Tentar Novamente</Text>
+                        <Text style={styles.primaryButtonText}>🏠 Voltar ao Menu</Text>
                     </TouchableOpacity>
                     
+                    {/* Botão Secundário - Tentar Novamente */}
                     <TouchableOpacity 
-                        style={[styles.button, styles.homeButton]} 
-                        onPress={handleBackToHome}
+                        style={[styles.button, styles.secondaryButton]} 
+                        onPress={handleRetryQuiz}
+                        activeOpacity={0.8}
                     >
-                        <Text style={styles.homeButtonText}>Voltar ao Menu</Text>
+                        <Text style={styles.secondaryButtonText}>🔄 Tentar Novamente</Text>
                     </TouchableOpacity>
-                </View>
+
+                    {/* Botão Terciário - Explorar Módulos */}
+                    <TouchableOpacity 
+                        style={[styles.button, styles.tertiaryButton]} 
+                        onPress={handleViewModules}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.tertiaryButtonText}>📚 Explorar Módulos</Text>
+                    </TouchableOpacity>
+
+                    {/* Botão Adicional - Biblioteca (apenas para quiz de módulo) */}
+                    {!isDailyChallenge && (
+                        <TouchableOpacity 
+                            style={[styles.button, styles.quaternaryButton]} 
+                            onPress={handleLibraryAccess}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.quaternaryButtonText}>📖 Biblioteca de Conteúdo</Text>
+                        </TouchableOpacity>
+                    )}
+                </Animated.View>
             </ScrollView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
+    // Layout usando Design System
     container: {
-        flex: 1,
-        backgroundColor: '#fff',
-        paddingHorizontal: Math.max(16, screenWidth * 0.04),
+        ...AppStyles.Layout.container,
+        backgroundColor: AppColors.backgroundSecondary,
     },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: Math.max(16, screenHeight * 0.02),
-        marginBottom: Math.max(16, screenHeight * 0.02),
+        ...AppStyles.Layout.header,
     },
     headerTitle: {
-        fontSize: Math.max(20, screenWidth * 0.05),
-        fontWeight: 'bold',
-        color: '#131313',
-        marginLeft: Math.max(16, screenWidth * 0.04),
-        fontFamily: 'Roboto-Bold',
+        fontSize: AppTypography.size.xl,
+        fontWeight: AppTypography.weight.bold,
+        color: AppColors.textPrimary,
+        marginLeft: AppSpacing.lg,
+        fontFamily: AppTypography.family.bold,
     },
     content: {
         flex: 1,
     },
-    scoreCard: {
-        backgroundColor: '#F8F9FA',
-        borderRadius: Math.max(16, screenWidth * 0.04),
-        padding: Math.max(24, screenWidth * 0.06),
-        marginBottom: Math.max(24, screenHeight * 0.03),
+    mainResultCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 32,
+        marginBottom: 20,
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#E9ECEF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
     },
     emoji: {
-        fontSize: Math.max(48, screenWidth * 0.12),
-        marginBottom: Math.max(16, screenHeight * 0.02),
+        fontSize: 60,
+        marginBottom: 16,
+    },
+    gradeText: {
+        fontSize: 48,
+        fontWeight: 'bold',
+        fontFamily: 'Roboto-Bold',
+        marginBottom: 8,
     },
     performanceTitle: {
-        fontSize: Math.max(24, screenWidth * 0.06),
+        fontSize: 24,
         fontWeight: 'bold',
-        marginBottom: Math.max(8, screenHeight * 0.01),
+        marginBottom: 8,
         fontFamily: 'Roboto-Bold',
-        textAlign: 'center',
     },
-    performanceMessage: {
-        fontSize: Math.max(16, screenWidth * 0.04),
+    percentageText: {
+        fontSize: 36,
+        fontWeight: 'bold',
+        color: '#131313',
+        fontFamily: 'Roboto-Bold',
+        marginBottom: 12,
+    },
+    feedbackText: {
+        fontSize: 16,
         color: '#545454',
         textAlign: 'center',
-        lineHeight: Math.max(22, screenHeight * 0.028),
+        lineHeight: 22,
         fontFamily: 'Roboto-Regular',
     },
-    scoreDetails: {
+    metricsCard: {
         backgroundColor: '#FFFFFF',
-        borderRadius: Math.max(12, screenWidth * 0.03),
-        padding: Math.max(20, screenWidth * 0.05),
-        marginBottom: Math.max(24, screenHeight * 0.03),
-        borderWidth: 1,
-        borderColor: '#E9ECEF',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    scoreRow: {
+    metricsTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#131313',
+        marginBottom: 20,
+        fontFamily: 'Roboto-Bold',
+    },
+    metricRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 24,
+    },
+    metricItem: {
+        alignItems: 'center',
+    },
+    metricNumber: {
+        fontSize: 32,
+        fontWeight: 'bold',
+        color: '#131313',
+        fontFamily: 'Roboto-Bold',
+    },
+    metricLabel: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginTop: 4,
+        fontFamily: 'Roboto-Regular',
+    },
+    additionalMetrics: {
+        borderTopWidth: 1,
+        borderTopColor: '#F1F1F1',
+        paddingTop: 16,
+    },
+    additionalMetricRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: Math.max(8, screenHeight * 0.01),
-        borderBottomWidth: 1,
-        borderBottomColor: '#F1F1F1',
+        paddingVertical: 8,
     },
-    scoreLabel: {
-        fontSize: Math.max(16, screenWidth * 0.04),
+    additionalMetricLabel: {
+        fontSize: 16,
         color: '#545454',
         fontFamily: 'Roboto-Regular',
     },
-    scoreValue: {
-        fontSize: Math.max(18, screenWidth * 0.045),
+    additionalMetricValue: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#131313',
+        fontFamily: 'Roboto-Medium',
+    },
+    progressCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    progressTitle: {
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#131313',
+        marginBottom: 16,
         fontFamily: 'Roboto-Bold',
     },
-    progressContainer: {
-        marginBottom: Math.max(24, screenHeight * 0.03),
+    progressBarContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 20,
     },
     progressBarBackground: {
-        height: Math.max(12, screenHeight * 0.015),
+        flex: 1,
+        height: 12,
         backgroundColor: '#E9ECEF',
-        borderRadius: Math.max(6, screenWidth * 0.015),
+        borderRadius: 6,
         overflow: 'hidden',
+        marginRight: 12,
     },
     progressBar: {
         height: '100%',
-        borderRadius: Math.max(6, screenWidth * 0.015),
+        borderRadius: 6,
     },
-    tipsContainer: {
-        backgroundColor: '#F8F9FA',
-        borderRadius: Math.max(12, screenWidth * 0.03),
-        padding: Math.max(20, screenWidth * 0.05),
-        marginBottom: Math.max(24, screenHeight * 0.03),
-    },
-    tipsTitle: {
-        fontSize: Math.max(18, screenWidth * 0.045),
+    progressText: {
+        fontSize: 16,
         fontWeight: 'bold',
         color: '#131313',
-        marginBottom: Math.max(16, screenHeight * 0.02),
+        fontFamily: 'Roboto-Bold',
+        minWidth: 50,
+    },
+    performanceIndicators: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    indicator: {
+        alignItems: 'center',
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: '#F8F9FA',
+        flex: 1,
+        marginHorizontal: 2,
+    },
+    activeIndicator: {
+        backgroundColor: '#E3F2FD',
+        borderWidth: 2,
+        borderColor: '#2196F3',
+    },
+    indicatorText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#131313',
         fontFamily: 'Roboto-Bold',
     },
-    tipItem: {
-        marginBottom: Math.max(8, screenHeight * 0.01),
-    },
-    tipText: {
-        fontSize: Math.max(14, screenWidth * 0.035),
-        color: '#545454',
-        lineHeight: Math.max(20, screenHeight * 0.025),
+    indicatorLabel: {
+        fontSize: 12,
+        color: '#666',
         fontFamily: 'Roboto-Regular',
     },
-    actionButtons: {
-        gap: Math.max(12, screenHeight * 0.015),
-        marginBottom: Math.max(24, screenHeight * 0.03),
+    answersCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    button: {
-        height: Math.max(48, screenHeight * 0.06),
-        borderRadius: Math.max(24, screenWidth * 0.06),
+    answersTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#131313',
+        marginBottom: 16,
+        fontFamily: 'Roboto-Bold',
+    },
+    answerItem: {
+        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+    },
+    answerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    questionNumber: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#131313',
+        fontFamily: 'Roboto-Medium',
+    },
+    answerStatus: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: Math.max(24, screenWidth * 0.06),
     },
-    retryButton: {
-        backgroundColor: '#0A8CD6',
-    },
-    retryButtonText: {
+    answerStatusText: {
         color: '#FFFFFF',
-        fontSize: Math.max(16, screenWidth * 0.04),
+        fontSize: 14,
         fontWeight: 'bold',
-        fontFamily: 'Roboto-Bold',
     },
-    homeButton: {
-        backgroundColor: '#FFFFFF',
-        borderWidth: 2,
-        borderColor: '#0A8CD6',
+    answerPoints: {
+        fontSize: 14,
+        color: '#007AFF',
+        fontWeight: '600',
+        fontFamily: 'Roboto-Medium',
     },
-    homeButtonText: {
-        color: '#0A8CD6',
-        fontSize: Math.max(16, screenWidth * 0.04),
-        fontWeight: 'bold',
-        fontFamily: 'Roboto-Bold',
+    actionButtons: {
+        gap: 12,
+        marginBottom: 32,
+    },
+    // Botões usando o Design System padronizado
+    button: {
+        ...AppButtonStyles.primary,
+        marginVertical: AppSpacing.sm,
+    },
+    primaryButton: {
+        ...AppButtonStyles.primary,
+    },
+    primaryButtonText: {
+        ...AppButtonTextStyles.primary,
+    },
+    secondaryButton: {
+        ...AppButtonStyles.secondary,
+    },
+    secondaryButtonText: {
+        ...AppButtonTextStyles.secondary,
+    },
+    tertiaryButton: {
+        ...AppButtonStyles.outline,
+    },
+    tertiaryButtonText: {
+        ...AppButtonTextStyles.outline,
+    },
+    quaternaryButton: {
+        ...AppButtonStyles.ghost,
+    },
+    quaternaryButtonText: {
+        ...AppButtonTextStyles.ghost,
     },
 });
 
-export default QuizResults; 
+export default QuizResults;

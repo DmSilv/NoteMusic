@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { ShowAccountSelectionScreenNavigationProp } from './types';
 import musico from '../../../assets/images/musico.png';
@@ -8,13 +8,28 @@ import TitleComponent from '../Components/Title/Title';
 import SubTitleComponent from '../Components/SubTitle/SubTitle';
 import PrimaryButton from '../Components/Form/Button/PrimaryButton/PrimaryButton';
 import Input from '../Components/Form/Input/Input';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function RegisterUser({ navigation }) {
   const scrollViewRef = useRef<ScrollView>(null); 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // Estado separado para confirmar senha
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { register } = useAuth();
+
+  // Estados para formulário
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Estados para validação
+  const [nameError, setNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -32,8 +47,73 @@ export default function RegisterUser({ navigation }) {
     };
   }, []);
 
-  const handlePressSelectLevel = () => {
-    navigation.navigate('SelectLevelPerson');
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validateForm = () => {
+    let isValid = true;
+    
+    // Validar nome
+    if (!name.trim()) {
+      setNameError('Nome é obrigatório');
+      isValid = false;
+    } else {
+      setNameError('');
+    }
+
+    // Validar email
+    if (!email.trim()) {
+      setEmailError('E-mail é obrigatório');
+      isValid = false;
+    } else if (!validateEmail(email)) {
+      setEmailError('E-mail inválido');
+      isValid = false;
+    } else {
+      setEmailError('');
+    }
+
+    // Validar senha
+    if (!password.trim()) {
+      setPasswordError('Senha é obrigatória');
+      isValid = false;
+    } else if (password.length < 6) {
+      setPasswordError('Senha deve ter pelo menos 6 caracteres');
+      isValid = false;
+    } else {
+      setPasswordError('');
+    }
+
+    // Validar confirmação de senha
+    if (!confirmPassword.trim()) {
+      setConfirmPasswordError('Confirmação de senha é obrigatória');
+      isValid = false;
+    } else if (password !== confirmPassword) {
+      setConfirmPasswordError('Senhas não coincidem');
+      isValid = false;
+    } else {
+      setConfirmPasswordError('');
+    }
+
+    return isValid;
+  };
+
+  const handlePressSelectLevel = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      await register({ name, email, password });
+      navigation.navigate('SelectLevelPerson');
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível criar a conta. Verifique os dados e tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -62,14 +142,50 @@ export default function RegisterUser({ navigation }) {
           <SubTitleComponent fontFamily={''} marginRight={''} marginTop={''} color={''} subtitle={'Preencha seus dados e prepare-se para uma incrível aventura musical!'}></SubTitleComponent>
 
           <SubTitleComponent subtitle={'Nome completo'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
-          <Input onChangeText={''} placeholder={'Digite seu nome completo'} secureTextEntry={false} styleWidth={{ width: windowWidth * 0.85 }}></Input>
+          <Input 
+            onChangeText={(text) => {
+              setName(text);
+              if (nameError) setNameError('');
+            }}
+            placeholder={'Digite seu nome completo'} 
+            secureTextEntry={false} 
+            styleWidth={{ width: windowWidth * 0.85 }}
+            value={name}
+            error={nameError}
+            autoCapitalize="words"
+          />
 
           <SubTitleComponent subtitle={'E-mail'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
-          <Input onChangeText={''} placeholder={'Digite seu melhor e-mail'} secureTextEntry={false} styleWidth={{ width: windowWidth * 0.85 }}></Input>
+          <Input 
+            onChangeText={(text) => {
+              setEmail(text);
+              if (emailError) setEmailError('');
+            }}
+            placeholder={'Digite seu melhor e-mail'} 
+            secureTextEntry={false} 
+            styleWidth={{ width: windowWidth * 0.85 }}
+            value={email}
+            error={emailError}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
 
           <SubTitleComponent subtitle={'Senha'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
           <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
-            <Input onChangeText={''} placeholder={'Crie uma senha'} secureTextEntry={!showPassword} styleWidth={{ width: windowWidth * 0.85 }}></Input>
+            <Input 
+              onChangeText={(text) => {
+                setPassword(text);
+                if (passwordError) setPasswordError('');
+              }}
+              placeholder={'Crie uma senha'} 
+              secureTextEntry={!showPassword} 
+              styleWidth={{ width: windowWidth * 0.85 }}
+              value={password}
+              error={passwordError}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIconContainer}>
               <Image
                 source={showPassword ? eyeIcon : eyeOffIcon}
@@ -80,16 +196,34 @@ export default function RegisterUser({ navigation }) {
 
           <SubTitleComponent subtitle={'Confirmar Senha'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
           <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
-            <Input onChangeText={''} placeholder={'Digite sua senha novamente'} secureTextEntry={!showConfirmPassword} styleWidth={{ width: windowWidth * 0.85 }}></Input>
+            <Input 
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                if (confirmPasswordError) setConfirmPasswordError('');
+              }}
+              placeholder={'Digite sua senha novamente'} 
+              secureTextEntry={!showConfirmPassword} 
+              styleWidth={{ width: windowWidth * 0.85 }}
+              value={confirmPassword}
+              error={confirmPasswordError}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
             <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIconContainer}> 
               <Image
-                source={showConfirmPassword ? eyeIcon : eyeOffIcon} // Controle separado para o campo de confirmação
+                source={showConfirmPassword ? eyeIcon : eyeOffIcon}
                 style={styles.eyeIcon}
               />
             </TouchableOpacity>
           </View>
 
-          <PrimaryButton onPress={handlePressSelectLevel} styleWidth={{ width: windowWidth * 0.85 }} title={'Confirmar e Continuar'}></PrimaryButton>
+          <PrimaryButton 
+            onPress={handlePressSelectLevel} 
+            styleWidth={{ width: windowWidth * 0.85 }} 
+            title={'Confirmar e Continuar'}
+            loading={isLoading}
+            disabled={isLoading}
+          />
 
         </View>
       </ScrollView>

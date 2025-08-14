@@ -17,16 +17,16 @@ interface ModuleCategoryProps {
  const ProfileAccount: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     const scrollViewRef = useRef<ScrollView>(null); 
     const [keyboardVisible, setKeyboardVisible] = useState(false);
-    const [showOldPassword, setShowOldPassword] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-    const { user, logout } = useAuth();
+    const { user, logout, updateUser } = useAuth();
     
     // Estados do formulário
     const [formData, setFormData] = useState({
         name: user?.name || '',
         email: user?.email || '',
-        oldPassword: '',
+        currentPassword: '',
         newPassword: ''
     });
 
@@ -46,7 +46,7 @@ interface ModuleCategoryProps {
     const [errors, setErrors] = useState({
         name: '',
         email: '',
-        oldPassword: '',
+        currentPassword: '',
         newPassword: ''
     });
   
@@ -86,12 +86,16 @@ interface ModuleCategoryProps {
             newErrors.email = '';
         }
         
-        // Validar senha antiga (se fornecida)
-        if (formData.oldPassword.trim() && formData.oldPassword.length < 6) {
-            newErrors.oldPassword = 'Senha deve ter pelo menos 6 caracteres';
+        // Validar senha atual (se tentando alterar email ou senha)
+        const isChangingEmailOrPassword = (formData.email.trim() && formData.email !== user?.email) || formData.newPassword.trim();
+        if (isChangingEmailOrPassword && !formData.currentPassword.trim()) {
+            newErrors.currentPassword = 'Senha atual é obrigatória para alterar email ou senha';
+            isValid = false;
+        } else if (formData.currentPassword.trim() && formData.currentPassword.length < 6) {
+            newErrors.currentPassword = 'Senha deve ter pelo menos 6 caracteres';
             isValid = false;
         } else {
-            newErrors.oldPassword = '';
+            newErrors.currentPassword = '';
         }
         
         // Validar nova senha (se fornecida)
@@ -110,7 +114,7 @@ interface ModuleCategoryProps {
         return (
             (formData.name.trim() && formData.name !== user?.name) ||
             (formData.email.trim() && formData.email !== user?.email) ||
-            formData.oldPassword.trim() ||
+            formData.currentPassword.trim() ||
             formData.newPassword.trim()
         );
     };
@@ -130,34 +134,37 @@ interface ModuleCategoryProps {
         setIsLoading(true);
         
         try {
-            // Simular atualização da conta
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Preparar dados para atualização
+            const updateData: any = {};
             
-            // Atualizar dados do usuário (apenas se houver mudanças)
-            const updatedData: any = {};
             if (formData.name.trim() && formData.name !== user?.name) {
-                updatedData.name = formData.name.trim();
+                updateData.name = formData.name.trim();
             }
             if (formData.email.trim() && formData.email !== user?.email) {
-                updatedData.email = formData.email.trim();
+                updateData.email = formData.email.trim();
+            }
+            if (formData.currentPassword.trim()) {
+                updateData.currentPassword = formData.currentPassword.trim();
+            }
+            if (formData.newPassword.trim()) {
+                updateData.newPassword = formData.newPassword.trim();
             }
             
-            if (Object.keys(updatedData).length > 0) {
-                // Aqui você chamaria a função updateUser do contexto
-                console.log('Dados atualizados:', updatedData);
-            }
+            // Chamar função de atualização do contexto
+            await updateUser(updateData);
             
             Alert.alert('Sucesso', 'Conta atualizada com sucesso!');
             
             // Limpar campos de senha
             setFormData(prev => ({
                 ...prev,
-                oldPassword: '',
+                currentPassword: '',
                 newPassword: ''
             }));
             
-        } catch (error) {
-            Alert.alert('Erro', 'Não foi possível atualizar a conta. Tente novamente.');
+        } catch (error: any) {
+            console.error('Erro ao atualizar conta:', error);
+            Alert.alert('Erro', error.message || 'Não foi possível atualizar a conta. Tente novamente.');
         } finally {
             setIsLoading(false);
         }
@@ -206,7 +213,7 @@ interface ModuleCategoryProps {
                     error = 'E-mail inválido';
                 }
                 break;
-            case 'oldPassword':
+            case 'currentPassword':
                 if (value.trim() && value.length < 6) {
                     error = 'Senha deve ter pelo menos 6 caracteres';
                 }
@@ -293,15 +300,15 @@ interface ModuleCategoryProps {
                     <SubTitleComponent subtitle={'Senha Antiga'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
                     <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
                         <Input 
-                            onChangeText={(text) => handleInputChange('oldPassword', text)} 
-                            placeholder={'Digite sua senha antiga'} 
-                            secureTextEntry={!showOldPassword} 
+                            onChangeText={(text) => handleInputChange('currentPassword', text)} 
+                            placeholder={'Digite sua senha atual'} 
+                            secureTextEntry={!showCurrentPassword} 
                             styleWidth={{ width: '100%' }}
-                            value={formData.oldPassword}
-                            error={errors.oldPassword}
+                            value={formData.currentPassword}
+                            error={errors.currentPassword}
                         />
-                        <TouchableOpacity onPress={() => setShowOldPassword(!showOldPassword)} style={styles.eyeIconContainer}>
-                            <Image source={showOldPassword ? eyeIcon : eyeOffIcon} style={styles.eyeIcon} />
+                        <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)} style={styles.eyeIconContainer}>
+                            <Image source={showCurrentPassword ? eyeIcon : eyeOffIcon} style={styles.eyeIcon} />
                         </TouchableOpacity>
                     </View>
 

@@ -1,10 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator } from 'react-native';
 import TitleComponent from '../Components/Title/Title';
 import SubTitleComponent from '../Components/SubTitle/SubTitle';
 import UserInfo from '../Components/UserInfo/Userinfo';
 import BackButton from '../Components/BackButton/BackButton';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useAuth } from '../../contexts/AuthContext';
+import moduleService, { ModuleCategory as ModuleCategoryType } from '../../../services/moduleService';
 
 const { width } = Dimensions.get('window');
 
@@ -14,63 +16,79 @@ interface ModuleCategoryProps {
 }
 
 const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
+    const { user } = useAuth();
+    const [categories, setCategories] = useState<ModuleCategoryType[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        loadCategories();
+    }, []);
+
+    const loadCategories = async () => {
+        try {
+            setIsLoading(true);
+            const moduleCategories = await moduleService.getModulesByCategory();
+            console.log('Categorias carregadas:', moduleCategories);
+            setCategories(moduleCategories || []);
+        } catch (error) {
+            console.error('Erro ao carregar categorias:', error);
+            setCategories([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handlePressProfileHome = () => {
         navigation.navigate('ProfileHome');
     };
 
-    const handlePressContentListCategory = () => {
-        navigation.navigate('ContentListCategory');
+    const handlePressContentListCategory = (category: ModuleCategoryType) => {
+        navigation.navigate('ContentListCategory', { category });
     };
 
-    const categorias = [
-        'Propriedades do Som',
-        'Escalas Maiores',
-        'Figuras Musicais',
-        'Ritmo Ternários',
-        'Compasso Simples',
-        'Andamento e Dinâmica',
-        'Solfégio Básico',
-        'Articulação Musical',
-        'Intervalos Musicais',
-        'Expressão Musical',
-        'Síncopa e Contratempo',
-        'Compasso Composto',
-    ];
-
-    const renderCard = (titulo: string) => (
-        <View style={styles.card}>
-            <TouchableOpacity style={styles.containerCard} onPress={handlePressContentListCategory}>
-                <View style={styles.cardHeader}>
-                    <View style={styles.containerNoteIcon}>
-                        <Image
-                            source={require('../../../assets/images/music-note.png')}
-                            style={[styles.image, styles.Note]}
-                        />
-                    </View>
-                    <Text style={styles.cardText}>{titulo}</Text>
-                </View>
-                <View style={styles.cardFooter}>
-                    <View style={styles.timeContainer}>
-                        <View style={styles.containerModuleTime}>
+    const renderCard = (category: ModuleCategoryType) => {
+        if (!category || !category.name) {
+            return null;
+        }
+        
+        return (
+            <View style={styles.card}>
+                <TouchableOpacity 
+                    style={styles.containerCard} 
+                    onPress={() => handlePressContentListCategory(category)}
+                >
+                    <View style={styles.cardHeader}>
+                        <View style={styles.containerNoteIcon}>
                             <Image
-                                source={require('../../../assets/images/clock.png')}
-                                style={[styles.image, styles.clock]}
+                                source={require('../../../assets/images/music-note.png')}
+                                style={[styles.image, styles.Note]}
                             />
-                            <Text>5 min</Text>
                         </View>
+                        <Text style={styles.cardText}>{category.name}</Text>
                     </View>
-                    <Text>🥇</Text>
-                </View>
-            </TouchableOpacity>
-        </View>
-    );
+                    <View style={styles.cardFooter}>
+                        <View style={styles.timeContainer}>
+                            <View style={styles.containerModuleTime}>
+                                <Image
+                                    source={require('../../../assets/images/clock.png')}
+                                    style={[styles.image, styles.clock]}
+                                />
+                                <Text>{category.modules?.length || 0} módulos</Text>
+                            </View>
+                        </View>
+                        <Text>🥇</Text>
+                    </View>
+                </TouchableOpacity>
+            </View>
+        );
+    };
 
     return (
         <View style={styles.container}>
             <ScrollView>
                 {/* Barra Superior */}
                 <View style={styles.header}>
-                    <UserInfo userName="Danilo" userSubtitle="Aprendiz" />
+                    <UserInfo userName={user?.name || "Usuário"} userSubtitle="Aprendiz" />
                     <View style={styles.backButtoncontainer}>
                         <BackButton onPress={handlePressProfileHome} />
                     </View>
@@ -94,11 +112,18 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
 
                 {/* Cartões */}
                 <View style={styles.cardGrid}>
-                    {categorias.map((categoria, index) => (
-                        <View key={index} style={styles.cardWrapper}>
-                            {renderCard(categoria)}
+                    {isLoading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color="#007AFF" />
+                            <Text style={styles.loadingText}>Carregando categorias...</Text>
                         </View>
-                    ))}
+                    ) : (
+                        categories.filter(category => category && category.name).map((category, index) => (
+                            <View key={`category-${category.name}-${index}`} style={styles.cardWrapper}>
+                                {renderCard(category)}
+                            </View>
+                        ))
+                    )}
                 </View>
             </ScrollView>
         </View>
@@ -220,6 +245,18 @@ const styles = StyleSheet.create({
         width: 16,
         height: 16,
         marginRight: 4,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 50,
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
+        fontFamily: 'Poppins-Regular',
     },
 });
 

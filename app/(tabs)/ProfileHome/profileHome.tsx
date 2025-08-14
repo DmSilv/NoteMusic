@@ -1,58 +1,64 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NavigationProp } from '@react-navigation/native';
 import MenuBottom from '../Components/MenuBottom';
+import { useAuth } from '../../contexts/AuthContext';
+import apiService from '../../../services/api';
 
-const user = {
-  name: 'Danilo Silva',
-  level: 'Intermediário',
-  streak: 7,
-  totalLessons: 24,
-  completedLessons: 16,
-  weeklyGoal: 5,
-  weeklyProgress: 3,
-  nextAchievement: 'Complete 2 dias seguidos para ganhar o troféu “Foco Total”!',
-  avatar: '',
-  nextQuiz: {
-    title: 'Desafio Semanal IA',
-    description: 'Pergunta personalizada gerada por IA para seu nível!',
-    expiresIn: '4 dias',
-    questionsCount: 10,
-    level: 'Adaptativo',
-  }
-};
+interface UserStats {
+  level: string;
+  progress: number;
+  streak: number;
+  achievements: any[];
+  challenges: any[];
+  totalModules: number;
+  completedModules: number;
+  weeklyGoal: number;
+  weeklyProgress: number;
+  nextAchievement: string;
+  totalPoints: number;
+  averageScorePercentage: number;
+  bestCategory: string | null;
+  currentStreak: number;
+  longestStreak: number;
+  totalStudyDays: number;
+  quizPassRate: number;
+  levelProgress: {
+    current: string;
+    next: string;
+    percentage: number;
+    requirements: string;
+    pointsProgress?: { current: number; required: number; percentage: number };
+    modulesProgress?: { current: number; required: number; percentage: number };
+  };
+  weeklyProgressDetail: {
+    current: number;
+    goal: number;
+    percentage: number;
+  };
+  recentActivity: {
+    lastStudyDate: string | null;
+    modulesLast7Days: number;
+    quizzesLast7Days: number;
+  };
+}
 
-const stats = [
-  {
-    label: 'Sequência',
-    value: `${user.streak} dias`,
-    icon: 'fire',
-    description: 'Dias seguidos de estudo',
-    color: '#FF9800',
-  },
-  {
-    label: 'Progresso',
-    value: `${Math.round((user.completedLessons / user.totalLessons) * 100)}%`,
-    icon: 'progress-check',
-    description: 'Do curso concluído',
-    color: '#1976D2',
-  },
-  {
-    label: 'Meta semanal',
-    value: `${user.weeklyProgress}/${user.weeklyGoal}`,
-    icon: 'calendar-check',
-    description: 'Aulas esta semana',
-    color: '#43A047',
-  },
-];
+interface DailyChallenge {
+  title: string;
+  description: string;
+  expiresIn: string;
+  questionsCount: number;
+  level: string;
+}
 
 const { width } = Dimensions.get('window');
 const CARD_MAX_WIDTH = 150;
 
-function getGreeting(user: any): string {
+function getGreeting(userStats: UserStats | any): string {
   const hour = new Date().getHours();
-  if (user.streak >= 7) return 'Parabéns pela sequência!';
+  const streak = userStats?.streak || 0;
+  if (streak >= 7) return 'Parabéns pela sequência!';
   if (hour < 12) return 'Bom dia,';
   if (hour < 18) return 'Boa tarde,';
   return 'Boa noite,';
@@ -60,12 +66,12 @@ function getGreeting(user: any): string {
 
 function getLevelBadge(level: string): { color: string; icon: string } {
   const levels: Record<string, { color: string; icon: string }> = {
-    'Aprendiz': { color: '#B0BEC5', icon: 'school' },
+    'Iniciante': { color: '#B0BEC5', icon: 'school' },
     'Intermediário': { color: '#42A5F5', icon: 'star' },
-    'Virtuoso': { color: '#43A047', icon: 'music' },
-    'Maestro': { color: '#FFD700', icon: 'trophy' },
+    'Avançado': { color: '#43A047', icon: 'music' },
+    'Mestre': { color: '#FFD700', icon: 'trophy' },
   };
-  return levels[level] || levels['Aprendiz'];
+  return levels[level] || levels['Iniciante'];
 }
 
 interface ProfileHomeProps {
@@ -73,9 +79,200 @@ interface ProfileHomeProps {
 }
 
 export default function ProfileHome({ navigation }: ProfileHomeProps) {
-  const levelBadge = getLevelBadge(user.level);
-  const greeting = getGreeting(user);
-  const aulasRestantes = user.totalLessons - user.completedLessons;
+  const { user } = useAuth();
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadUserData();
+  }, [user]); // Recarregar quando o usuário mudar
+
+  const loadUserData = async () => {
+    console.log('🔍 Iniciando loadUserData...');
+    console.log('👤 Usuário atual:', user);
+    
+    try {
+      setIsLoading(true);
+      
+      // Dados mock padrão para todos os casos
+      const defaultStats = {
+        level: 'Iniciante',
+        progress: 0,
+        streak: 0,
+        achievements: [],
+        challenges: [],
+        totalModules: 12,
+        completedModules: 0,
+        weeklyGoal: 5,
+        weeklyProgress: 0,
+        nextAchievement: 'Complete seu primeiro módulo',
+        totalPoints: 0,
+        averageScorePercentage: 0,
+        bestCategory: null,
+        currentStreak: 0,
+        longestStreak: 0,
+        totalStudyDays: 0,
+        quizPassRate: 0,
+        levelProgress: {
+          current: 'Iniciante',
+          next: 'Intermediário',
+          percentage: 0,
+          requirements: 'Complete 3 módulos OU ganhe 300 pontos'
+        },
+        weeklyProgressDetail: {
+          current: 0,
+          goal: 5,
+          percentage: 0
+        },
+        recentActivity: {
+          lastStudyDate: null,
+          modulesLast7Days: 0,
+          quizzesLast7Days: 0
+        }
+      };
+
+      const defaultChallenge = {
+        title: 'Desafio Diário',
+        description: 'Complete um módulo hoje para ganhar pontos extras!',
+        expiresIn: '4 dias',
+        questionsCount: 5,
+        level: 'iniciante'
+      };
+
+      // Se não há usuário, usar dados padrão
+      if (!user) {
+        console.log('📱 Usuário não autenticado, usando dados padrão');
+        setUserStats(defaultStats);
+        setDailyChallenge(defaultChallenge);
+        return;
+      }
+
+      // Se há usuário, tentar buscar dados reais
+      console.log('🔐 Usuário autenticado, buscando dados reais...');
+      try {
+        const [stats, challenge] = await Promise.all([
+          apiService.getUserStats(),
+          apiService.getDailyChallenge()
+        ]);
+        
+        console.log('✅ Dados reais carregados:', { stats, challenge });
+        setUserStats(stats);
+        setDailyChallenge({
+          title: challenge.title || 'Desafio Diário',
+          description: challenge.description || 'Complete um módulo hoje!',
+          expiresIn: '4 dias',
+          questionsCount: challenge.questions?.length || 5,
+          level: challenge.level || 'iniciante'
+        });
+      } catch (apiError) {
+        console.error('❌ Erro na API, usando dados padrão:', apiError);
+        // Usar dados padrão com informações do usuário
+        setUserStats({
+          ...defaultStats,
+          level: user.level || 'Aprendiz'
+        });
+        setDailyChallenge(defaultChallenge);
+      }
+    } catch (error) {
+      console.error('💥 Erro geral ao carregar dados do usuário:', error);
+      // Em caso de erro geral, usar dados padrão
+      setUserStats({
+        level: 'Aprendiz',
+        progress: 0,
+        streak: 0,
+        achievements: [],
+        challenges: [],
+        totalModules: 12,
+        completedModules: 0,
+        weeklyGoal: 5,
+        weeklyProgress: 0,
+        nextAchievement: 'Complete seu primeiro módulo'
+      });
+      setDailyChallenge({
+        title: 'Desafio Diário',
+        description: 'Complete um módulo hoje para ganhar pontos extras!',
+        expiresIn: '4 dias',
+        questionsCount: 5,
+        level: 'iniciante'
+      });
+    } finally {
+      console.log('🏁 Finalizando loadUserData');
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{ marginTop: 10, color: '#666' }}>Carregando dados...</Text>
+      </View>
+    );
+  }
+
+  if (!userStats) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#666', fontSize: 16, textAlign: 'center', padding: 20 }}>
+          {user ? 'Carregando dados do usuário...' : 'Faça login para ver suas estatísticas'}
+        </Text>
+        {!user && (
+          <TouchableOpacity 
+            style={{ 
+              backgroundColor: '#007AFF', 
+              paddingHorizontal: 20, 
+              paddingVertical: 10, 
+              borderRadius: 8,
+              marginTop: 10
+            }}
+            onPress={() => navigation.navigate('LoginScreen')}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Fazer Login</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  // Garantir valores seguros
+  const safeUserStats = {
+    level: userStats?.level || 'Aprendiz',
+    streak: userStats?.streak || 0,
+    completedModules: userStats?.completedModules || 0,
+    totalModules: userStats?.totalModules || 12,
+    weeklyProgress: userStats?.weeklyProgress || 0,
+    weeklyGoal: userStats?.weeklyGoal || 5,
+    nextAchievement: userStats?.nextAchievement || 'Complete seu primeiro módulo'
+  };
+
+  const levelBadge = getLevelBadge(safeUserStats.level);
+  const greeting = getGreeting(safeUserStats);
+  const aulasRestantes = safeUserStats.totalModules - safeUserStats.completedModules;
+
+  const stats = [
+    {
+      label: 'Sequência',
+      value: `${safeUserStats.streak} dias`,
+      icon: 'fire',
+      description: 'Dias seguidos de estudo',
+      color: '#FF9800',
+    },
+    {
+      label: 'Progresso',
+      value: `${Math.round((safeUserStats.completedModules / safeUserStats.totalModules) * 100)}%`,
+      icon: 'progress-check',
+      description: 'Do curso concluído',
+      color: '#1976D2',
+    },
+    {
+      label: 'Meta semanal',
+      value: `${safeUserStats.weeklyProgress}/${safeUserStats.weeklyGoal}`,
+      icon: 'calendar-check',
+      description: 'Aulas esta semana',
+      color: '#43A047',
+    },
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
@@ -84,11 +281,11 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         <View style={styles.userHeader}>
           <View style={[styles.levelBadge, { backgroundColor: levelBadge.color }]}> 
             <MaterialCommunityIcons name={levelBadge.icon} size={22} color="#FFF" />
-            <Text style={styles.levelBadgeText}>{user.level}</Text>
+            <Text style={styles.levelBadgeText}>{safeUserStats.level}</Text>
           </View>
           <View style={styles.userTextBlock}>
             <Text style={styles.greeting}>{greeting}</Text>
-            <Text style={styles.username}>{user.name}</Text>
+            <Text style={styles.username}>{user?.name || "Usuário"}</Text>
             <Text style={styles.userLevelDetail}>
               {aulasRestantes > 0
                 ? `Faltam ${aulasRestantes} aulas para o próximo nível!`
@@ -112,7 +309,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         {/* Banner motivacional de conquista */}
         <View style={styles.achievementBanner}>
           <MaterialCommunityIcons name="trophy-award" size={22} color="#FFD700" style={{ marginRight: 8 }} />
-          <Text style={styles.achievementText}>{user.nextAchievement}</Text>
+          <Text style={styles.achievementText}>{safeUserStats.nextAchievement}</Text>
         </View>
 
         {/* Contexto acima do botão de categorias */}
@@ -129,27 +326,51 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         </TouchableOpacity>
 
         {/* Card de pergunta/desafio IA */}
-        <View style={styles.iaCard}>
-          <Text style={styles.iaTitle}>{user.nextQuiz.title}</Text>
-          <Text style={styles.iaDesc}>{user.nextQuiz.description}</Text>
-          <View style={styles.iaInfoRow}>
-            <View style={styles.iaInfoBox}>
-              <MaterialCommunityIcons name="clock-outline" size={18} color="#0087D3" />
-              <Text style={styles.iaInfoValue}>{user.nextQuiz.expiresIn}</Text>
+        {dailyChallenge && (
+          <View style={styles.iaCard}>
+            <Text style={styles.iaTitle}>{dailyChallenge.title}</Text>
+            <Text style={styles.iaDesc}>{dailyChallenge.description}</Text>
+            <View style={styles.iaInfoRow}>
+              <View style={styles.iaInfoBox}>
+                <MaterialCommunityIcons name="clock-outline" size={18} color="#0087D3" />
+                <Text style={styles.iaInfoValue}>{dailyChallenge.expiresIn}</Text>
+              </View>
+              <View style={styles.iaInfoBox}>
+                <MaterialCommunityIcons name="help-circle-outline" size={18} color="#0087D3" />
+                <Text style={styles.iaInfoValue}>{dailyChallenge.questionsCount} perguntas</Text>
+              </View>
+              <View style={styles.iaInfoBox}>
+                <MaterialCommunityIcons name="target" size={18} color="#0087D3" />
+                <Text style={styles.iaInfoValue}>{dailyChallenge.level}</Text>
+              </View>
             </View>
-            <View style={styles.iaInfoBox}>
-              <MaterialCommunityIcons name="help-circle-outline" size={18} color="#0087D3" />
-              <Text style={styles.iaInfoValue}>{user.nextQuiz.questionsCount} perguntas</Text>
-            </View>
-            <View style={styles.iaInfoBox}>
-              <MaterialCommunityIcons name="target" size={18} color="#0087D3" />
-              <Text style={styles.iaInfoValue}>{user.nextQuiz.level}</Text>
-            </View>
+            <TouchableOpacity 
+              style={styles.iaButton} 
+              onPress={async () => {
+                console.log('🎯 Iniciando desafio diário...');
+                try {
+                  setIsLoading(true);
+                  const daily = await apiService.getDailyChallenge();
+                  console.log('✅ Desafio diário carregado:', daily);
+                  
+                  const moduleId = daily.id || 'daily-challenge-mock';
+                  console.log('🚀 Navegando para Quiz com moduleId:', moduleId);
+                  
+                  navigation.navigate('Quiz', { moduleId });
+                } catch (error) {
+                  console.error('❌ Erro ao carregar desafio diário:', error);
+                  // Sempre funcionar, mesmo com erro
+                  console.log('🔄 Usando quiz mock como fallback');
+                  navigation.navigate('Quiz', { moduleId: 'daily-challenge-mock' });
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+            >
+              <Text style={styles.iaButtonText}>Responder agora</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.iaButton} onPress={() => alert('Iniciar desafio IA!')}>
-            <Text style={styles.iaButtonText}>Responder agora</Text>
-          </TouchableOpacity>
-        </View>
+        )}
       </ScrollView>
       <MenuBottom
         current="home"

@@ -90,4 +90,7 @@ export const getColor = (colorPath: string) => {
   }
   
   return current;
-}; 
+};
+
+// Default export para evitar warnings de rota
+export default colors; 

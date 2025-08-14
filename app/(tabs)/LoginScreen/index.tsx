@@ -1,6 +1,8 @@
 import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import garota_sentada from '../../../assets/images/garota_janela.png';
+import eyeIcon from '../../../assets/images/eye.png'; 
+import eyeOffIcon from '../../../assets/images/eye-off.png'; 
 import TitleComponent from '../Components/Title/Title';
 import SubTitleComponent from '../Components/SubTitle/SubTitle'; 
 import PrimaryButton from '../Components/Form/Button/PrimaryButton/PrimaryButton';
@@ -19,6 +21,7 @@ export default function LoginScreen({ navigation }) {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handlePressRemenberPassword = () => {
     navigation.navigate('RemenberPassword');
@@ -65,17 +68,10 @@ export default function LoginScreen({ navigation }) {
     setIsLoading(true);
     
     try {
-      // Simular login com dados do usuário
-      const userData = {
-        id: '1',
-        name: 'Danilo Silva',
-        email: email
-      };
-      
-      await login(userData);
+      await login({ email, password });
       navigation.navigate('ProfileHome');
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível fazer login. Tente novamente.');
+      Alert.alert('Erro', 'Email ou senha incorretos. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -172,19 +168,27 @@ export default function LoginScreen({ navigation }) {
             FontFamily={''} 
             MarginRight={0} 
           />
-          <Input 
-            onChangeText={(text) => {
-              setPassword(text);
-              if (passwordError) setPasswordError('');
-            }}
-            placeholder={"Digite sua senha"} 
-            secureTextEntry={true} 
-            styleWidth={{ width: windowWidth * 0.85 }} 
-            value={password}
-            error={passwordError}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
+            <Input 
+              onChangeText={(text) => {
+                setPassword(text);
+                if (passwordError) setPasswordError('');
+              }}
+              placeholder={"Digite sua senha"} 
+              secureTextEntry={!showPassword} 
+              styleWidth={{ width: windowWidth * 0.85 }} 
+              value={password}
+              error={passwordError}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIconContainer}>
+              <Image
+                source={showPassword ? eyeIcon : eyeOffIcon}
+                style={styles.eyeIcon}
+              />
+            </TouchableOpacity>
+          </View>
 
           <PrimaryButton 
             onPress={handlePressProfile} 
@@ -277,4 +281,20 @@ const styles = StyleSheet.create({
   image: {
     resizeMode: 'contain',
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  eyeIconContainer: {
+    position: 'absolute',
+    right: 10,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeIcon: {
+    width: 24,
+    height: 24,
+  }
 });

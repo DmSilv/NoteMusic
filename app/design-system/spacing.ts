@@ -3,82 +3,71 @@ import { scale, verticalScale } from '../utils/responsive';
 // Design System - Spacing
 export const spacing = {
   // Base spacing units
-  xs: scale(4),
-  sm: scale(8),
-  md: scale(16),
-  lg: scale(24),
-  xl: scale(32),
-  xxl: scale(48),
-  xxxl: scale(64),
-
-  // Vertical spacing (for height-based scaling)
-  vxs: verticalScale(4),
-  vsm: verticalScale(8),
-  vmd: verticalScale(16),
-  vlg: verticalScale(24),
-  vxl: verticalScale(32),
-  vxxl: verticalScale(48),
-  vxxxl: verticalScale(64),
-
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+  
   // Component-specific spacing
-  component: {
-    card: {
-      padding: scale(16),
-      margin: scale(8),
-      borderRadius: scale(12),
-    },
-    button: {
-      paddingVertical: verticalScale(12),
-      paddingHorizontal: scale(24),
-      borderRadius: scale(8),
-    },
-    input: {
-      paddingVertical: verticalScale(12),
-      paddingHorizontal: scale(16),
-      borderRadius: scale(8),
-    },
-    header: {
-      paddingVertical: verticalScale(16),
-      paddingHorizontal: scale(20),
-    },
+  button: {
+    padding: 12,
+    margin: 8,
   },
-
+  
+  card: {
+    padding: 16,
+    margin: 12,
+  },
+  
+  input: {
+    padding: 12,
+    margin: 8,
+  },
+  
   // Layout spacing
-  layout: {
-    screen: {
-      paddingHorizontal: scale(20),
-      paddingVertical: verticalScale(16),
-    },
-    section: {
-      marginVertical: verticalScale(24),
-    },
-    item: {
-      marginVertical: verticalScale(8),
-    },
+  container: {
+    padding: 20,
+    margin: 16,
   },
-
-  // Grid system
-  grid: {
-    gutter: scale(16),
-    column: scale(8),
+  
+  section: {
+    margin: 24,
+    padding: 16,
   },
 };
 
 // Spacing utilities
-export const getSpacing = (size: keyof typeof spacing) => {
+export const getSpacing = (size: keyof typeof spacing | number) => {
+  if (typeof size === 'number') return size;
   return spacing[size] || spacing.md;
 };
 
-export const createSpacing = (horizontal: number, vertical: number) => {
-  return {
-    paddingHorizontal: scale(horizontal),
-    paddingVertical: verticalScale(vertical),
-  };
+export const createSpacing = (multiplier: number = 1) => {
+  return spacing.md * multiplier;
 };
 
-export const createMargin = (horizontal: number, vertical: number) => {
-  return {
-    marginHorizontal: scale(horizontal),
-    marginVertical: verticalScale(vertical),
-  };
-}; 
+export const createMargin = (direction: 'top' | 'bottom' | 'left' | 'right' | 'vertical' | 'horizontal', size: number) => {
+  const spacingValue = getSpacing(size);
+  
+  switch (direction) {
+    case 'top':
+      return { marginTop: spacingValue };
+    case 'bottom':
+      return { marginBottom: spacingValue };
+    case 'left':
+      return { marginLeft: spacingValue };
+    case 'right':
+      return { marginRight: spacingValue };
+    case 'vertical':
+      return { marginVertical: spacingValue };
+    case 'horizontal':
+      return { marginHorizontal: spacingValue };
+    default:
+      return { margin: spacingValue };
+  }
+};
+
+// Default export para evitar warnings de rota
+export default spacing; 

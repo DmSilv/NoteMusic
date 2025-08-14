@@ -1,40 +1,62 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import UserInfo from '../../Components/UserInfo/Userinfo';
 import BackButton from '../../Components/BackButton/BackButton';
+import { useAuth } from '../../../contexts/AuthContext';
+import moduleService, { Module } from '../../../../services/moduleService';
 
 // Tipos de props
-interface ContentListCategory {
+interface ContentListCategoryProps {
     navigation: StackNavigationProp<any>;
+    route: any;
 }
 
-interface Lesson {
-    id: string;
-    title: string;
-    description: string;
-    time: string;
-}
+const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, route }) => {
+    const { user } = useAuth();
+    const [modules, setModules] = useState<Module[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [category, setCategory] = useState<any>(null);
 
-const lessons: Lesson[] = [
-    { id: '1', title: 'Propriedades do Som', description: 'A linguagem rítmica flui como uma melodia, alternando sons e pausas com precisão. Suas palavras dançam...', time: '5 min' },
-    { id: '2', title: 'Figuras musicais', description: 'A linguagem rítmica flui como uma melodia...', time: '5 min' },
-    { id: '3', title: 'Linguagem Rítmica', description: 'A linguagem rítmica flui como uma melodia...', time: '5 min' },
-    { id: '4', title: 'Linguagem Rítmica', description: 'A linguagem rítmica flui como uma melodia...', time: '5 min' },
-    { id: '5', title: 'Linguagem Rítmica', description: 'A linguagem rítmica flui como uma melodia...', time: '5 min' },
-];
+    useEffect(() => {
+        loadModules();
+    }, []);
 
-const ModuleCategoryScreen: React.FC<ContentListCategory> = ({ navigation }) => {
+    const loadModules = async () => {
+        try {
+            setIsLoading(true);
+            const categoryData = route.params?.category;
+            setCategory(categoryData);
+            
+            if (categoryData?.modules) {
+                setModules(categoryData.modules);
+            } else {
+                // Fallback: carregar todos os módulos
+                 const allModules = await moduleService.getAllModules();
+                 // Garantir que id venha preenchido
+                 const normalized = (allModules || []).map((m: any) => ({
+                    ...m,
+                    id: m.id || m._id
+                 }));
+                 setModules(normalized);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar módulos:', error);
+            setModules([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handlePressProfileHome = () => {
         navigation.navigate('ModuleCategory');
     };
 
-
-    const handlePressQuizIntroScreen = () => {
-        navigation.navigate('QuizIntroScreen');
+    const handlePressQuizIntroScreen = (moduleId: string) => {
+        navigation.navigate('Quiz', { moduleId });
     };
 
-    const renderLesson = ({ item }: { item: Lesson }) => (
+    const renderLesson = ({ item }: { item: Module }) => (
         <View style={styles.lessonContainer}>
             <View style={styles.headerlessonContainer}>
                 <View style={styles.containerNoteIcon}>
@@ -44,12 +66,9 @@ const ModuleCategoryScreen: React.FC<ContentListCategory> = ({ navigation }) => 
                     />
                 </View>
                 <Text style={styles.lessonTitle}>{item.title}</Text>
-
             </View>
             <Text style={styles.lessonDescription}>{item.description}</Text>
             <View style={styles.lessonFooter}>
-
-
                 <View style={styles.timeContainer}>
                     <View style={styles.containerModuleTime}>
                         <Image
@@ -57,14 +76,34 @@ const ModuleCategoryScreen: React.FC<ContentListCategory> = ({ navigation }) => 
                             style={[styles.image, styles.clock]}
                         />
                     </View>
-                    <Text style={styles.lessonTime}>{item.time}</Text>
+                    <Text style={styles.lessonTime}>5 min</Text>
                 </View>
-                <TouchableOpacity style={styles.startButton} onPress={handlePressQuizIntroScreen}>
+                <TouchableOpacity 
+                    style={styles.startButton} 
+                    onPress={() => handlePressQuizIntroScreen(item.id)}
+                >
                     <Text style={styles.startButtonText}>Iniciar</Text>
                 </TouchableOpacity>
             </View>
         </View>
     );
+
+    if (isLoading) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.Header}>
+                    <View style={styles.backButtoncontainer}>
+                        <BackButton onPress={handlePressProfileHome} />
+                    </View>
+                    <UserInfo userName={user?.name || "Usuário"} userSubtitle="Aprendiz" />
+                </View>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#007AFF" />
+                    <Text style={styles.loadingText}>Carregando módulos...</Text>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -72,19 +111,23 @@ const ModuleCategoryScreen: React.FC<ContentListCategory> = ({ navigation }) => 
                 <View style={styles.backButtoncontainer}>
                     <BackButton onPress={handlePressProfileHome} />
                 </View>
-                <UserInfo userName="Danilo" userSubtitle="Aprendiz" />
+                <UserInfo userName={user?.name || "Usuário"} userSubtitle="Aprendiz" />
             </View>
 
-            <Text style={styles.pageTitle}>Propriedades do Som</Text>
-            <Text style={styles.pageSubtitle}>Domine os Fundamentos da Acústica Musical</Text>
+            <Text style={styles.pageTitle}>{category?.name || "Módulos"}</Text>
+            <Text style={styles.pageSubtitle}>
+                {category?.modules?.length || modules?.length || 0} módulos disponíveis
+            </Text>
 
             <FlatList
-                data={lessons}
+                data={(modules || []).filter(Boolean)}
                 renderItem={renderLesson}
                 keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                // key para cada item já é garantido pelo keyExtractor;
+                // adicionando extraData para evitar warnings de keys
+                extraData={modules?.length}
             />
-
-
         </View>
     );
 };
@@ -203,6 +246,18 @@ const styles = StyleSheet.create({
         width: 16,
         height: 16,
         marginRight: 4,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 50,
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
+        fontFamily: 'Poppins-Regular',
     },
 });
 
