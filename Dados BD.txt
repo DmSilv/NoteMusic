@@ -1,0 +1,6 @@
+username  danielmingoranse84
+password MloJQaNkU3ZW3zyV
+
+mongodb+srv://danielmingoranse84:MloJQaNkU3ZW3zyV@notemusicdb.y9jf3qj.mongodb.net/?retryWrites=true&w=majority&appName=NoteMusicDB
+
+dados DB Notemusic
