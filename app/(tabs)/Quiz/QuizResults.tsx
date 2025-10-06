@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
-import BackButton from '../Components/BackButton/BackButton';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import quizService from '../../../services/quizService';
-import AppStyles, { AppColors, AppSpacing, AppTypography, AppButtonStyles, AppButtonTextStyles } from '../../../constants/AppStyles';
+import quizAttemptService, { QuizAttemptStatus } from '../../../services/quizAttemptService';
+import quizCompletionService from '../../../services/quizCompletionService';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
 
 interface QuizResultsProps {
     navigation: StackNavigationProp<any>;
@@ -34,48 +35,42 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         feedback = 'Quiz finalizado',
         quizId = '',
         moduleId = '',
-        isDailyChallenge = false
+        isDailyChallenge = false,
+        attempts = { current: 1, remaining: 2, maxAttempts: 3, cooldownUntil: null },
+        passed = false
     } = route.params || {};
 
-    // Animações
-    const fadeAnim = new Animated.Value(0);
-    const scaleAnim = new Animated.Value(0.8);
-    const progressAnim = new Animated.Value(0);
+    // Estados para gerenciar tentativas
+    const [currentAttemptStatus, setCurrentAttemptStatus] = useState<QuizAttemptStatus | null>(null);
+    const [isLastAttempt, setIsLastAttempt] = useState(false);
 
     useEffect(() => {
-        // Animação de entrada
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 600,
-                useNativeDriver: true,
-            }),
-            Animated.spring(scaleAnim, {
-                toValue: 1,
-                tension: 100,
-                friction: 8,
-                useNativeDriver: true,
-            }),
-        ]).start();
-
-        // Animação da barra de progresso
-        setTimeout(() => {
-            Animated.timing(progressAnim, {
-                toValue: percentage / 100,
-                duration: 1500,
-                useNativeDriver: false,
-            }).start();
-        }, 300);
-
         // Submeter resultados para o backend se usuário autenticado
         if (user && quizId && answers.length > 0) {
             submitQuizResults();
+        }
+
+        // Registrar tentativa e verificar status
+        if (!isDailyChallenge && quizId && moduleId) {
+            registerQuizAttempt();
+        }
+
+        // Otimista: se passou, marcar como concluído no cache local para refletir na lista
+        if (!isDailyChallenge && moduleId && passed) {
+            try {
+                quizCompletionService.markQuizAsCompleted(moduleId, {
+                    quizId: moduleId,
+                    score: correctAnswers,
+                    percentage,
+                    passed: true,
+                    completedAt: new Date().toISOString()
+                });
+            } catch {}
         }
     }, []);
 
     const submitQuizResults = async () => {
         try {
-            // Converter respostas para formato esperado pelo backend
             const formattedAnswers = answers.map((answer: QuizAnswer) => answer.selectedAnswer);
             
             await quizService.submitQuiz({
@@ -84,7 +79,30 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                 timeSpent
             });
         } catch (error) {
-            console.log('Erro ao submeter resultados (não crítico):', error);
+            // Falha silenciosa
+        }
+    };
+
+    const registerQuizAttempt = async () => {
+        try {
+            // Padronizar IDs: para quizzes por módulo, usar SEMPRE moduleId para ambos
+            const uniqueQuizId = moduleId;
+            const uniqueModuleId = moduleId;
+            
+            const attemptStatus = await quizAttemptService.registerQuizAttempt(
+                uniqueQuizId, 
+                uniqueModuleId, 
+                passed
+            );
+            
+            setCurrentAttemptStatus(attemptStatus);
+            
+            // Se passou no quiz, não é "última tentativa" - é sucesso!
+            const isLast = attemptStatus.attempts.current >= attemptStatus.attempts.maxAttempts && !passed;
+            setIsLastAttempt(isLast);
+            
+        } catch (error) {
+            setIsLastAttempt(true);
         }
     };
 
@@ -92,42 +110,52 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         if (percentage >= 90) {
             return {
                 title: 'Excelente!',
-                message: '🏆 Você demonstrou domínio excepcional do conteúdo!',
-                color: '#4CAF50',
+                message: 'Você demonstrou domínio excepcional do conteúdo!',
+                color: '#43A047', // Verde - sucesso
                 emoji: '🎉',
-                grade: 'A+'
+                grade: 'A+',
+                icon: 'trophy' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#E8F5E8'
             };
         } else if (percentage >= 80) {
             return {
                 title: 'Muito Bom!',
-                message: '⭐ Você tem uma boa compreensão do material.',
-                color: '#4CAF50',
+                message: 'Você tem uma boa compreensão do material.',
+                color: '#42A5F5', // Azul - confiança
                 emoji: '👏',
-                grade: 'A'
+                grade: 'A',
+                icon: 'star' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#E3F2FD'
             };
         } else if (percentage >= 70) {
             return {
                 title: 'Bom!',
-                message: '📚 Bom trabalho! Continue estudando para melhorar.',
-                color: '#FF9800',
+                message: 'Bom trabalho! Continue estudando para melhorar.',
+                color: '#0087D3', // Azul principal do app
                 emoji: '👍',
-                grade: 'B'
+                grade: 'B',
+                icon: 'thumb-up' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#E3F2FD'
             };
         } else if (percentage >= 50) {
             return {
                 title: 'Satisfatório',
-                message: '💪 Continue se esforçando! Você está no caminho certo.',
-                color: '#FF5722',
+                message: 'Continue se esforçando! Você está no caminho certo.',
+                color: '#FF9800', // Laranja - motivação
                 emoji: '📖',
-                grade: 'C'
+                grade: 'C',
+                icon: 'book-open' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#FFF3E0'
             };
         } else {
             return {
                 title: 'Precisa Melhorar',
-                message: '🔄 A prática leva à perfeição! Não desista.',
-                color: '#F44336',
+                message: 'A prática leva à perfeição! Não desista.',
+                color: '#FF9800', // Laranja - encorajamento, não punição
                 emoji: '💪',
-                grade: 'D'
+                grade: 'D',
+                icon: 'school' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#FFF3E0'
             };
         }
     };
@@ -140,7 +168,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
 
     const performance = getPerformanceData();
 
-    // Funções de navegação melhoradas e consistentes
+    // Funções de navegação
     const handleBackToHome = () => {
         console.log('🏠 Voltando ao menu principal');
         navigation.reset({
@@ -149,491 +177,563 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         });
     };
 
+    const handleFinalize = () => {
+        console.log('✅ Finalizando quiz...');
+        handleBackToHome();
+    };
+
     const handleRetryQuiz = () => {
         console.log('🔄 Tentando novamente o quiz');
-        navigation.goBack(); // Volta para a tela do quiz atual
+        
+        if (isLastAttempt) {
+            Alert.alert(
+                '⚠️ Última Tentativa!',
+                'Esta é sua última tentativa para este quiz. Após falhar, você terá que aguardar 30 minutos antes de tentar novamente. Deseja continuar?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { 
+                        text: 'Sim, Tentar Novamente', 
+                        style: 'destructive',
+                        onPress: () => proceedWithRetry()
+                    }
+                ]
+            );
+        } else {
+            Alert.alert(
+                '🔄 Tentar Novamente',
+                'Você tem 2 tentativas para este quiz. Deseja tentar novamente agora?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { 
+                        text: 'Sim, Tentar Novamente', 
+                        onPress: () => proceedWithRetry()
+                    }
+                ]
+            );
+        }
+    };
+
+    const proceedWithRetry = () => {
+        console.log('🔄 Executando retry do quiz...');
+        
+        navigation.reset({
+            index: 1,
+            routes: [
+                { name: 'ProfileHome' },
+                { 
+                    name: 'Quiz', 
+                    params: { 
+                        moduleId, 
+                        isRetry: true,
+                        attemptStatus: currentAttemptStatus,
+                        timestamp: Date.now()
+                    } 
+                }
+            ],
+        });
     };
 
     const handleViewModules = () => {
         console.log('📚 Navegando para módulos');
-        navigation.navigate('ModuleCategory');
-    };
-
-    const handleLibraryAccess = () => {
-        console.log('📖 Acessando biblioteca de conteúdo');
-        // Função adicional para acesso à biblioteca
-        navigation.navigate('ModuleCategory');
+        navigation.reset({
+            index: 1,
+            routes: [
+                { name: 'ProfileHome' },
+                { name: 'ModuleCategory' }
+            ],
+        });
     };
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <BackButton onPress={() => navigation.navigate('ProfileHome')} />
-                <Text style={styles.headerTitle}>Resultados do Quiz</Text>
-            </View>
+            <ScrollView 
+                style={styles.scrollView} 
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                {/* Header com ícone e título */}
+                <View style={styles.header}>
+                    <View style={styles.headerIconContainer}>
+                        <MaterialCommunityIcons 
+                            name="clipboard-check" 
+                            size={28} 
+                            color="#0087D3" 
+                        />
+                    </View>
+                    <Text style={styles.headerTitle}>Resultados do Quiz</Text>
+                    <Text style={styles.headerSubtitle}>{quizTitle}</Text>
+                </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 {/* Card Principal de Resultado */}
-                <Animated.View 
-                    style={[
-                        styles.mainResultCard,
-                        { 
-                            opacity: fadeAnim,
-                            transform: [{ scale: scaleAnim }]
-                        }
-                    ]}
-                >
-                    <Text style={styles.emoji}>{performance.emoji}</Text>
-                    <Text style={[styles.gradeText, { color: performance.color }]}>
-                        {performance.grade}
-                    </Text>
-                    <Text style={[styles.performanceTitle, { color: performance.color }]}>
-                        {performance.title}
-                    </Text>
-                    <Text style={styles.percentageText}>
-                        {percentage}%
-                    </Text>
-                    <Text style={styles.feedbackText}>
-                        {performance.message}
-                    </Text>
-                </Animated.View>
-
-                {/* Métricas Detalhadas */}
-                <Animated.View style={[styles.metricsCard, { opacity: fadeAnim }]}>
-                    <Text style={styles.metricsTitle}>📊 Métricas Detalhadas</Text>
+                <View style={[styles.mainResultCard, { backgroundColor: performance.bgColor }]}>
+                    <View style={styles.performanceIconContainer}>
+                        <MaterialCommunityIcons 
+                            name={performance.icon} 
+                            size={40} 
+                            color={performance.color} 
+                        />
+                    </View>
                     
-                    <View style={styles.metricRow}>
-                        <View style={styles.metricItem}>
-                            <Text style={styles.metricNumber}>{totalQuestions}</Text>
-                            <Text style={styles.metricLabel}>Total de Questões</Text>
+                    <View style={styles.performanceContent}>
+                        <Text style={[styles.gradeText, { color: performance.color }]}>
+                            {performance.grade}
+                        </Text>
+                        <Text style={[styles.performanceTitle, { color: performance.color }]}>
+                            {performance.title}
+                        </Text>
+                        <Text style={styles.percentageText}>
+                            {percentage}%
+                        </Text>
+                        <Text style={styles.feedbackText}>
+                            {performance.message}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Seção de Estatísticas - Organizada como ProfileHome */}
+                <View style={styles.statsSection}>
+                    <Text style={styles.sectionTitle}>📊 Estatísticas do Quiz</Text>
+                    
+                    <View style={styles.statsRow}>
+                        <View style={styles.statCard}>
+                            <MaterialCommunityIcons name="help-circle" size={20} color="#0087D3" />
+                            <Text style={styles.statValue}>{totalQuestions}</Text>
+                            <Text style={styles.statLabel}>Questões</Text>
                         </View>
-                        <View style={styles.metricItem}>
-                            <Text style={[styles.metricNumber, { color: '#4CAF50' }]}>{correctAnswers}</Text>
-                            <Text style={styles.metricLabel}>Acertos</Text>
+                        
+                        <View style={styles.statCard}>
+                            <MaterialCommunityIcons name="check-circle" size={20} color="#43A047" />
+                            <Text style={[styles.statValue, { color: '#43A047' }]}>{correctAnswers}</Text>
+                            <Text style={styles.statLabel}>Acertos</Text>
                         </View>
-                        <View style={styles.metricItem}>
-                            <Text style={[styles.metricNumber, { color: '#F44336' }]}>{wrongAnswers}</Text>
-                            <Text style={styles.metricLabel}>Erros</Text>
+                        
+                        <View style={styles.statCard}>
+                            <MaterialCommunityIcons name="close-circle" size={20} color="#FF9800" />
+                            <Text style={[styles.statValue, { color: '#FF9800' }]}>{wrongAnswers}</Text>
+                            <Text style={styles.statLabel}>Erros</Text>
                         </View>
                     </View>
+                </View>
 
-                    <View style={styles.additionalMetrics}>
-                        <View style={styles.additionalMetricRow}>
-                            <Text style={styles.additionalMetricLabel}>Pontuação Total:</Text>
-                            <Text style={styles.additionalMetricValue}>{totalScore} pontos</Text>
+                {/* Seção de Detalhes - Organizada como ProfileHome */}
+                <View style={styles.detailsSection}>
+                    <Text style={styles.sectionTitle}>📋 Detalhes do Desempenho</Text>
+                    
+                    <View style={styles.detailCard}>
+                        <View style={styles.detailRow}>
+                            <View style={styles.detailItem}>
+                                <MaterialCommunityIcons name="trophy" size={18} color="#FF8C00" />
+                                <Text style={styles.detailLabel}>Pontuação Total</Text>
+                                <Text style={styles.detailValue}>{totalScore} pontos</Text>
+                            </View>
+                            
+                            <View style={styles.detailItem}>
+                                <MaterialCommunityIcons name="clock" size={18} color="#0087D3" />
+                                <Text style={styles.detailLabel}>Tempo Gasto</Text>
+                                <Text style={styles.detailValue}>{formatTime(timeSpent)}</Text>
+                            </View>
                         </View>
-                        <View style={styles.additionalMetricRow}>
-                            <Text style={styles.additionalMetricLabel}>Tempo Gasto:</Text>
-                            <Text style={styles.additionalMetricValue}>{formatTime(timeSpent)}</Text>
-                        </View>
-                        <View style={styles.additionalMetricRow}>
-                            <Text style={styles.additionalMetricLabel}>Média de Tempo:</Text>
-                            <Text style={styles.additionalMetricValue}>
-                                {totalQuestions > 0 ? formatTime(Math.floor(timeSpent / totalQuestions)) : '0:00'} por questão
-                            </Text>
-                        </View>
-                        {isDailyChallenge && (
-                            <View style={styles.additionalMetricRow}>
-                                <Text style={styles.additionalMetricLabel}>Tipo:</Text>
-                                <Text style={[styles.additionalMetricValue, { color: '#007AFF' }]}>
-                                    🌟 Desafio Diário
+                        
+                        <View style={styles.detailRow}>
+                            <View style={styles.detailItem}>
+                                <MaterialCommunityIcons name="timer" size={18} color="#42A5F5" />
+                                <Text style={styles.detailLabel}>Média por Questão</Text>
+                                <Text style={styles.detailValue}>
+                                    {totalQuestions > 0 ? formatTime(Math.floor(timeSpent / totalQuestions)) : '0:00'}
                                 </Text>
                             </View>
-                        )}
-                    </View>
-                </Animated.View>
-
-                {/* Barra de Progresso Animada */}
-                <Animated.View style={[styles.progressCard, { opacity: fadeAnim }]}>
-                    <Text style={styles.progressTitle}>Desempenho Visual</Text>
-                    <View style={styles.progressBarContainer}>
-                        <View style={styles.progressBarBackground}>
-                            <Animated.View 
-                                style={[
-                                    styles.progressBar,
-                                    {
-                                        width: progressAnim.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: ['0%', '100%'],
-                                        }),
-                                        backgroundColor: performance.color
-                                    }
-                                ]}
-                            />
+                            
+                            <View style={styles.detailItem}>
+                                <MaterialCommunityIcons name="percent" size={18} color="#43A047" />
+                                <Text style={styles.detailLabel}>Taxa de Acerto</Text>
+                                <Text style={styles.detailValue}>
+                                    {totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0}%
+                                </Text>
+                            </View>
                         </View>
-                        <Text style={styles.progressText}>{percentage}%</Text>
-                    </View>
-                    
-                    {/* Indicadores de Performance */}
-                    <View style={styles.performanceIndicators}>
-                        <View style={[styles.indicator, percentage >= 90 && styles.activeIndicator]}>
-                            <Text style={styles.indicatorText}>90%+</Text>
-                            <Text style={styles.indicatorLabel}>Excelente</Text>
-                        </View>
-                        <View style={[styles.indicator, percentage >= 70 && percentage < 90 && styles.activeIndicator]}>
-                            <Text style={styles.indicatorText}>70%+</Text>
-                            <Text style={styles.indicatorLabel}>Bom</Text>
-                        </View>
-                        <View style={[styles.indicator, percentage >= 50 && percentage < 70 && styles.activeIndicator]}>
-                            <Text style={styles.indicatorText}>50%+</Text>
-                            <Text style={styles.indicatorLabel}>Regular</Text>
-                        </View>
-                        <View style={[styles.indicator, percentage < 50 && styles.activeIndicator]}>
-                            <Text style={styles.indicatorText}>0%+</Text>
-                            <Text style={styles.indicatorLabel}>Melhorar</Text>
-                        </View>
-                    </View>
-                </Animated.View>
-
-                {/* Detalhes das Respostas */}
-                {answers.length > 0 && (
-                    <Animated.View style={[styles.answersCard, { opacity: fadeAnim }]}>
-                        <Text style={styles.answersTitle}>📝 Detalhes das Respostas</Text>
-                        {answers.map((answer: QuizAnswer, index: number) => (
-                            <View key={index} style={styles.answerItem}>
-                                <View style={styles.answerHeader}>
-                                    <Text style={styles.questionNumber}>Questão {answer.questionIndex + 1}</Text>
-                                    <View style={[
-                                        styles.answerStatus,
-                                        { backgroundColor: answer.isCorrect ? '#4CAF50' : '#F44336' }
-                                    ]}>
-                                        <Text style={styles.answerStatusText}>
-                                            {answer.isCorrect ? '✓' : '✗'}
-                                        </Text>
-                                    </View>
+                        
+                        {/* Informações sobre tentativas e tipo de quiz - mais claras */}
+                        <View style={styles.quizInfoContainer}>
+                            {isDailyChallenge ? (
+                                <View style={styles.quizInfoItem}>
+                                    <MaterialCommunityIcons name="star" size={16} color="#FF8C00" />
+                                    <Text style={styles.quizInfoText}>🌟 Desafio Diário Completo</Text>
                                 </View>
-                                <Text style={styles.answerPoints}>
-                                    +{answer.points} pontos
-                                </Text>
-                            </View>
-                        ))}
-                    </Animated.View>
+                            ) : (
+                                <View style={styles.quizInfoItem}>
+                                    <MaterialCommunityIcons name="repeat" size={16} color="#0087D3" />
+                                    <Text style={styles.quizInfoText}>
+                                        🔄 Tentativa {attempts?.current || 1} de {attempts?.maxAttempts || 2}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </View>
+
+                {/* Seção de Respostas - Organizada como ProfileHome */}
+                {answers.length > 0 && (
+                    <View style={styles.answersSection}>
+                        <Text style={styles.sectionTitle}>📝 Respostas Detalhadas</Text>
+                        
+                        <View style={styles.answersCard}>
+                            {answers.map((answer: QuizAnswer, index: number) => (
+                                <View key={index} style={styles.answerItem}>
+                                    <View style={styles.answerHeader}>
+                                        <Text style={styles.questionNumber}>Questão {answer.questionIndex + 1}</Text>
+                                        <View style={[
+                                            styles.answerStatus,
+                                            { backgroundColor: answer.isCorrect ? '#43A047' : '#FF9800' }
+                                        ]}>
+                                            <MaterialCommunityIcons 
+                                                name={answer.isCorrect ? "check" : "close"} 
+                                                size={14} 
+                                                color="#FFFFFF" 
+                                            />
+                                        </View>
+                                    </View>
+                                    <Text style={styles.answerPoints}>
+                                        +{answer.points} pontos
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
                 )}
 
-                {/* Botões de Ação - Padronizados e Funcionais */}
-                <Animated.View style={[styles.actionButtons, { opacity: fadeAnim }]}>
-                    {/* Botão Principal - Voltar ao Menu */}
-                    <TouchableOpacity 
-                        style={[styles.button, styles.primaryButton]} 
-                        onPress={handleBackToHome}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.primaryButtonText}>🏠 Voltar ao Menu</Text>
-                    </TouchableOpacity>
-                    
-                    {/* Botão Secundário - Tentar Novamente */}
-                    <TouchableOpacity 
-                        style={[styles.button, styles.secondaryButton]} 
-                        onPress={handleRetryQuiz}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.secondaryButtonText}>🔄 Tentar Novamente</Text>
-                    </TouchableOpacity>
-
-                    {/* Botão Terciário - Explorar Módulos */}
-                    <TouchableOpacity 
-                        style={[styles.button, styles.tertiaryButton]} 
-                        onPress={handleViewModules}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.tertiaryButtonText}>📚 Explorar Módulos</Text>
-                    </TouchableOpacity>
-
-                    {/* Botão Adicional - Biblioteca (apenas para quiz de módulo) */}
-                    {!isDailyChallenge && (
+                {/* Seção de Ações */}
+                <View style={styles.actionsSection}>
+                    <View style={styles.actionButtons}>
+                        {/* Botão Principal - Finalizar */}
                         <TouchableOpacity 
-                            style={[styles.button, styles.quaternaryButton]} 
-                            onPress={handleLibraryAccess}
+                            style={[styles.button, styles.primaryButton]} 
+                            onPress={handleFinalize}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.quaternaryButtonText}>📖 Biblioteca de Conteúdo</Text>
+                            <MaterialCommunityIcons name="check" size={18} color="#FFFFFF" />
+                            <Text style={styles.primaryButtonText}>Finalizar</Text>
                         </TouchableOpacity>
-                    )}
-                </Animated.View>
+                        
+                        {/* Botão Secundário - Tentar Novamente (apenas se disponível) */}
+                        {!isLastAttempt && !passed && (
+                            <TouchableOpacity 
+                                style={[styles.button, styles.secondaryButton]} 
+                                onPress={handleRetryQuiz}
+                                activeOpacity={0.8}
+                            >
+                                <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
+                                <Text style={styles.secondaryButtonText}>Tentar Novamente</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Mensagem quando não pode tentar - APENAS se não passou */}
+                        {isLastAttempt && !passed && (
+                            <View style={styles.statusMessage}>
+                                <MaterialCommunityIcons name="alert-circle" size={18} color="#FF9800" />
+                                <View style={styles.statusMessageContent}>
+                                    <Text style={styles.statusMessageText}>
+                                        Você esgotou suas tentativas para este quiz
+                                    </Text>
+                                    <Text style={styles.statusMessageSubtext}>
+                                        O quiz ficará bloqueado por 30 minutos. Aproveite para estudar!
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Botão Terciário - Explorar Módulos */}
+                        <TouchableOpacity 
+                            style={[styles.button, styles.tertiaryButton]} 
+                            onPress={handleViewModules}
+                            activeOpacity={0.8}
+                        >
+                            <MaterialCommunityIcons name="book-open" size={18} color="#0087D3" />
+                            <Text style={styles.tertiaryButtonText}>Explorar Módulos</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </ScrollView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    // Layout usando Design System
     container: {
-        ...AppStyles.Layout.container,
-        backgroundColor: AppColors.backgroundSecondary,
+        flex: 1,
+        backgroundColor: '#F8F9FA',
     },
-    header: {
-        ...AppStyles.Layout.header,
-    },
-    headerTitle: {
-        fontSize: AppTypography.size.xl,
-        fontWeight: AppTypography.weight.bold,
-        color: AppColors.textPrimary,
-        marginLeft: AppSpacing.lg,
-        fontFamily: AppTypography.family.bold,
-    },
-    content: {
+    scrollView: {
         flex: 1,
     },
-    mainResultCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 32,
-        marginBottom: 20,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 8,
+    scrollContent: {
+        paddingHorizontal: 16,
+        paddingTop: 24,
+        paddingBottom: 32,
     },
-    emoji: {
-        fontSize: 60,
+    header: {
+        alignItems: 'center',
+        marginBottom: 28,
+    },
+    headerIconContainer: {
+        backgroundColor: '#C6E8FF',
+        padding: 12,
+        borderRadius: 50,
         marginBottom: 16,
     },
-    gradeText: {
-        fontSize: 48,
+    headerTitle: {
+        fontSize: 24,
         fontWeight: 'bold',
-        fontFamily: 'Roboto-Bold',
+        color: '#0087D3',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    headerSubtitle: {
+        fontSize: 16,
+        color: '#888',
+        textAlign: 'center',
+    },
+    mainResultCard: {
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 24,
+        alignItems: 'center',
+        elevation: 2,
+        shadowOpacity: 0.07,
+        shadowRadius: 6,
+    },
+    performanceIconContainer: {
+        backgroundColor: '#FFFFFF',
+        padding: 12,
+        borderRadius: 50,
+        marginBottom: 16,
+        elevation: 1,
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    performanceContent: {
+        alignItems: 'center',
+    },
+    gradeText: {
+        fontSize: 36,
+        fontWeight: 'bold',
         marginBottom: 8,
     },
     performanceTitle: {
-        fontSize: 24,
+        fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 8,
-        fontFamily: 'Roboto-Bold',
     },
     percentageText: {
-        fontSize: 36,
+        fontSize: 28,
         fontWeight: 'bold',
-        color: '#131313',
-        fontFamily: 'Roboto-Bold',
+        color: '#0087D3',
         marginBottom: 12,
     },
     feedbackText: {
-        fontSize: 16,
+        fontSize: 14,
         color: '#545454',
         textAlign: 'center',
-        lineHeight: 22,
-        fontFamily: 'Roboto-Regular',
+        lineHeight: 20,
     },
-    metricsCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 24,
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    metricsTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#131313',
-        marginBottom: 20,
-        fontFamily: 'Roboto-Bold',
-    },
-    metricRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
+    statsSection: {
         marginBottom: 24,
     },
-    metricItem: {
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#0087D3',
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    statsRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 12,
+    },
+    statCard: {
+        flex: 1,
+        maxWidth: 120,
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        paddingVertical: 20,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        elevation: 2,
+        shadowOpacity: 0.07,
+        shadowRadius: 6,
+        minWidth: 100,
+    },
+    statValue: {
+        fontSize: 18,
+        color: '#0087D3',
+        fontWeight: 'bold',
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    statLabel: {
+        fontSize: 12,
+        color: '#545454',
+        textAlign: 'center',
+    },
+    detailsSection: {
+        marginBottom: 24,
+    },
+    detailCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 20,
+        elevation: 2,
+        shadowOpacity: 0.07,
+        shadowRadius: 6,
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    detailItem: {
+        flex: 1,
         alignItems: 'center',
     },
-    metricNumber: {
-        fontSize: 32,
-        fontWeight: 'bold',
-        color: '#131313',
-        fontFamily: 'Roboto-Bold',
-    },
-    metricLabel: {
-        fontSize: 14,
-        color: '#666',
+    detailLabel: {
+        fontSize: 12,
+        color: '#545454',
+        marginTop: 6,
+        marginBottom: 4,
         textAlign: 'center',
-        marginTop: 4,
-        fontFamily: 'Roboto-Regular',
     },
-    additionalMetrics: {
+    detailValue: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#0087D3',
+        textAlign: 'center',
+    },
+    quizInfoContainer: {
+        marginTop: 16,
+        paddingTop: 16,
         borderTopWidth: 1,
         borderTopColor: '#F1F1F1',
-        paddingTop: 16,
     },
-    additionalMetricRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 8,
-    },
-    additionalMetricLabel: {
-        fontSize: 16,
-        color: '#545454',
-        fontFamily: 'Roboto-Regular',
-    },
-    additionalMetricValue: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#131313',
-        fontFamily: 'Roboto-Medium',
-    },
-    progressCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 24,
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    progressTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#131313',
-        marginBottom: 16,
-        fontFamily: 'Roboto-Bold',
-    },
-    progressBarContainer: {
+    quizInfoItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 8,
+        gap: 8,
     },
-    progressBarBackground: {
-        flex: 1,
-        height: 12,
-        backgroundColor: '#E9ECEF',
-        borderRadius: 6,
-        overflow: 'hidden',
-        marginRight: 12,
-    },
-    progressBar: {
-        height: '100%',
-        borderRadius: 6,
-    },
-    progressText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#131313',
-        fontFamily: 'Roboto-Bold',
-        minWidth: 50,
-    },
-    performanceIndicators: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    indicator: {
-        alignItems: 'center',
-        padding: 8,
-        borderRadius: 8,
-        backgroundColor: '#F8F9FA',
-        flex: 1,
-        marginHorizontal: 2,
-    },
-    activeIndicator: {
-        backgroundColor: '#E3F2FD',
-        borderWidth: 2,
-        borderColor: '#2196F3',
-    },
-    indicatorText: {
+    quizInfoText: {
         fontSize: 14,
-        fontWeight: 'bold',
-        color: '#131313',
-        fontFamily: 'Roboto-Bold',
+        color: '#545454',
+        fontWeight: '500',
     },
-    indicatorLabel: {
-        fontSize: 12,
-        color: '#666',
-        fontFamily: 'Roboto-Regular',
+    answersSection: {
+        marginBottom: 24,
     },
     answersCard: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#FFF',
         borderRadius: 16,
-        padding: 24,
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    answersTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#131313',
-        marginBottom: 16,
-        fontFamily: 'Roboto-Bold',
+        padding: 16,
+        elevation: 2,
+        shadowOpacity: 0.07,
+        shadowRadius: 6,
     },
     answerItem: {
         backgroundColor: '#F8F9FA',
         borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-    },
-    answerHeader: {
+        padding: 12,
+        marginBottom: 8,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+    },
+    answerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
     },
     questionNumber: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
-        color: '#131313',
-        fontFamily: 'Roboto-Medium',
+        color: '#0087D3',
+        marginRight: 8,
     },
     answerStatus: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    answerStatusText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
     answerPoints: {
-        fontSize: 14,
-        color: '#007AFF',
+        fontSize: 12,
+        color: '#43A047',
         fontWeight: '600',
-        fontFamily: 'Roboto-Medium',
+    },
+    actionsSection: {
+        marginBottom: 20,
     },
     actionButtons: {
         gap: 12,
-        marginBottom: 32,
     },
-    // Botões usando o Design System padronizado
     button: {
-        ...AppButtonStyles.primary,
-        marginVertical: AppSpacing.sm,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        elevation: 2,
+        gap: 8,
     },
     primaryButton: {
-        ...AppButtonStyles.primary,
+        backgroundColor: '#0087D3',
     },
     primaryButtonText: {
-        ...AppButtonTextStyles.primary,
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     secondaryButton: {
-        ...AppButtonStyles.secondary,
+        backgroundColor: '#43A047',
     },
     secondaryButtonText: {
-        ...AppButtonTextStyles.secondary,
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     tertiaryButton: {
-        ...AppButtonStyles.outline,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 2,
+        borderColor: '#0087D3',
     },
     tertiaryButtonText: {
-        ...AppButtonTextStyles.outline,
+        color: '#0087D3',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
-    quaternaryButton: {
-        ...AppButtonStyles.ghost,
+    statusMessage: {
+        flexDirection: 'row',
+        backgroundColor: '#FFF3E0',
+        padding: 16,
+        borderRadius: 12,
+        marginTop: 8,
+        alignItems: 'center',
+        gap: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#FF9800',
     },
-    quaternaryButtonText: {
-        ...AppButtonTextStyles.ghost,
+    statusMessageContent: {
+        flex: 1,
+    },
+    statusMessageText: {
+        fontSize: 14,
+        color: '#E65100',
+        fontWeight: '600',
+    },
+    statusMessageSubtext: {
+        fontSize: 12,
+        color: '#E65100',
+        marginTop: 2,
     },
 });
 

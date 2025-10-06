@@ -55,7 +55,7 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
 
         <View style={[styles.containerModel, { height: containerModelHeight }]}>
           <View style={styles.containerTitle}>
-            <TitleComponent title="Bem-vindo ao NoteMusic" color="white" fontFamily="Roboto-Bold" fontSize={''} />
+            <TitleComponent title="Bem-vindo ao NoteMusic" color="white" fontFamily="Roboto-Bold" fontSize={''} truncate={false} />
           </View>
           <SubTitle
             subtitle="Prepare-se para uma experiência musical envolvente Explore os segredos da teoria musical e aperfeiçoe suas habilidades."

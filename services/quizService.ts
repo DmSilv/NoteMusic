@@ -22,25 +22,48 @@ export interface QuizHistory {
 }
 
 class QuizService {
+  // Cache para evitar múltiplas requisições
+  private quizCache = new Map<string, { data: Quiz; timestamp: number }>();
+  private cacheExpiration = 5 * 60 * 1000; // 5 minutos
+
   async getQuiz(moduleId: string): Promise<Quiz> {
     try {
-      // Validar se moduleId é um ObjectId válido
-      if (!validateModuleId(moduleId)) {
-        throw new Error(getInvalidIdMessage(moduleId, 'módulo'));
+      // Validar ID
+      if (!moduleId || typeof moduleId !== 'string' || moduleId.trim() === '') {
+        throw new Error('ID do módulo inválido');
       }
 
+      // Validar se moduleId é um ObjectId válido
+      if (!validateModuleId(moduleId)) {
+        throw new Error(getInvalidIdMessage('module'));
+      }
+
+      // Verificar cache
+      const cacheKey = `quiz_${moduleId}`;
+      const cached = this.quizCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < this.cacheExpiration) {
+        console.log(`📦 Quiz carregado do cache: ${moduleId}`);
+        return cached.data;
+      }
+
+      console.log(`🌐 Buscando quiz no servidor: ${moduleId}`);
       const quiz = await apiService.getQuiz(moduleId);
       
       // Verificar se o quiz tem a estrutura esperada
-      if (quiz && quiz.questions && Array.isArray(quiz.questions)) {
-        return quiz;
-      } else {
-        console.error('Quiz inválido recebido:', quiz);
-        throw new Error('Dados do quiz inválidos');
+      if (!quiz || !quiz.questions || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+        throw new Error('Dados do quiz inválidos ou vazios');
       }
+
+      // Armazenar no cache
+      this.quizCache.set(cacheKey, {
+        data: quiz,
+        timestamp: Date.now()
+      });
+
+      return quiz;
     } catch (error) {
-      console.error('Erro ao buscar quiz:', error);
-      throw error; // Propagar erro em vez de retornar mock
+      console.error('❌ Erro ao buscar quiz:', error);
+      throw new Error(`Falha ao carregar o quiz: ${error.message}`);
     }
   }
 
@@ -48,7 +71,7 @@ class QuizService {
     try {
       // Validar se quizId é um ObjectId válido (permitir mock do desafio diário)
       if (submission.quizId !== 'daily-challenge-mock' && !validateQuizId(submission.quizId)) {
-        throw new Error(getInvalidIdMessage(submission.quizId, 'quiz'));
+        throw new Error(getInvalidIdMessage('quiz'));
       }
 
       const response = await apiService.submitQuiz(submission);
@@ -77,40 +100,117 @@ class QuizService {
     return await apiService.getQuizHistory();
   }
 
-  async validateQuestion(quizId: string, questionIndex: number, selectedAnswer: number): Promise<QuestionValidationResult> {
+  // ✅ NOVAS FUNÇÕES PARA GERENCIAR TENTATIVAS
+  async checkQuizAttempt(quizId: string, moduleId: string): Promise<any> {
     try {
-      // Validar se quizId é um ObjectId válido (permitir mock do desafio diário)
-      if (quizId !== 'daily-challenge-mock' && !validateQuizId(quizId)) {
-        throw new Error(getInvalidIdMessage(quizId, 'quiz'));
-      }
-
-      const response = await apiService.validateQuestion(quizId, questionIndex, selectedAnswer);
+      console.log(`🔍 Verificando tentativa para quiz ${quizId} no módulo ${moduleId}`);
       
-      // Verificar se a resposta é válida
-      if (response && typeof response.isCorrect === 'boolean') {
-        return response;
+      const response = await apiService.checkQuizAttempt(quizId, moduleId);
+      
+      if (response && response.success) {
+        console.log(`📊 Status da tentativa:`, response.data);
+        return response.data;
       } else {
         throw new Error('Resposta inválida do servidor');
       }
     } catch (error) {
-      console.error('Erro ao validar questão:', error);
+      console.error('❌ Erro ao verificar tentativa:', error);
       throw error;
+    }
+  }
+
+  async registerQuizAttempt(quizId: string, moduleId: string): Promise<any> {
+    try {
+      const response = await apiService.registerQuizAttempt(quizId, moduleId);
+      
+      if (response && response.success) {
+        return response.data;
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ NOVA FUNÇÃO: Verificar se pode iniciar quiz (validação prévia)
+  async canStartQuiz(quizId: string, moduleId: string): Promise<any> {
+    try {
+      console.log(`🔍 Verificando se pode iniciar quiz ${quizId} no módulo ${moduleId}`);
+      const response = await apiService.checkQuizAttempt(quizId, moduleId);
+      if (response && response.success) {
+        console.log(`📊 Status para iniciar quiz:`, response.data);
+        return response.data;
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
+    } catch (error) {
+      console.error('❌ Erro ao verificar se pode iniciar quiz:', error);
+      // Em caso de erro, permitir tentar iniciar
+      return {
+        canAttempt: true,
+        reason: 'error_fallback',
+        message: 'Erro na verificação - permitindo tentativa'
+      };
+    }
+  }
+
+  async validateQuestion(quizId: string, questionIndex: number, selectedAnswer: number): Promise<QuestionValidationResult> {
+    try {
+      // Validações básicas
+      if (!quizId) throw new Error('ID do quiz é obrigatório');
+      if (questionIndex < 0) throw new Error('Índice da questão inválido');
+      if (selectedAnswer < 0) throw new Error('Resposta selecionada inválida');
+
+      // Validar se quizId é um ObjectId válido (permitir mock do desafio diário)
+      if (quizId !== 'daily-challenge-mock' && !validateQuizId(quizId)) {
+        throw new Error(getInvalidIdMessage('quiz'));
+      }
+
+      console.log(`🔍 Validando questão ${questionIndex} do quiz ${quizId}`);
+      
+      // Tentar validação com retry em caso de erro de rede
+      let lastError;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const response = await apiService.validateQuestion(quizId, questionIndex, selectedAnswer);
+          
+          // Verificar se a resposta é válida
+          if (response && typeof response.isCorrect === 'boolean') {
+            return response;
+          } else {
+            throw new Error('Resposta inválida do servidor');
+          }
+        } catch (error) {
+          lastError = error;
+          if (attempt < 3) {
+            console.log(`⚠️ Tentativa ${attempt} falhou, tentando novamente...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          }
+        }
+      }
+      
+      throw lastError;
+    } catch (error) {
+      console.error('❌ Erro ao validar questão:', error);
+      throw new Error(`Falha na validação: ${error.message}`);
     }
   }
 
   async getDailyChallenge(): Promise<Quiz> {
     try {
+      console.log('🌟 Buscando desafio diário...');
       const response = await apiService.getDailyChallenge();
       
       // Verificar se a resposta é válida
-      if (response && response.questions && Array.isArray(response.questions)) {
-        return response;
-      } else {
-        throw new Error('Dados do desafio diário inválidos');
+      if (!response || !response.questions || !Array.isArray(response.questions) || response.questions.length === 0) {
+        throw new Error('Dados do desafio diário inválidos ou vazios');
       }
+
+      return response;
     } catch (error) {
-      console.error('Erro ao buscar desafio diário:', error);
-      throw error; // Propagar erro em vez de retornar mock
+      console.error('❌ Erro ao buscar desafio diário:', error);
+      throw new Error(`Falha ao carregar desafio diário: ${error.message}`);
     }
   }
 
@@ -143,6 +243,14 @@ class QuizService {
     } else {
       return 'Continue estudando! A prática leva à perfeição.';
     }
+  }
+
+  /**
+   * Limpar cache (útil para refresh manual)
+   */
+  clearCache(): void {
+    this.quizCache.clear();
+    console.log('🧹 Cache do quiz limpo');
   }
 }
 

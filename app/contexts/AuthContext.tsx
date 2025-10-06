@@ -1,15 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService, { User, LoginData, RegisterData, UpdateUserData } from '../../services/api';
+import { processError } from '../../utils/errorHandler';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (loginData: LoginData) => Promise<void>;
+  isLoginInProgress: boolean;
+  loginAttempts: number;
+  login: (loginData: LoginData) => Promise<{ requirePasswordChange?: boolean; warning?: string }>;
   register: (registerData: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (userData: UpdateUserData) => Promise<void>;
   checkAuth: () => Promise<void>;
+  changeTempPassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,6 +33,9 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastLoginAttempt, setLastLoginAttempt] = useState<number>(0);
+  const [loginAttempts, setLoginAttempts] = useState<number>(0);
+  const [isLoginInProgress, setIsLoginInProgress] = useState<boolean>(false);
 
   useEffect(() => {
     loadUserFromStorage();
@@ -63,13 +70,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const login = async (loginData: LoginData) => {
+    // Evitar múltiplas tentativas simultâneas
+    if (isLoginInProgress) {
+      throw new Error('Login já está em andamento. Aguarde...');
+    }
+
+    const now = Date.now();
+    const timeSinceLastAttempt = now - lastLoginAttempt;
+    
+    // Rate limiting: máximo 1 tentativa a cada 3 segundos
+    if (timeSinceLastAttempt < 3000) {
+      throw new Error('Aguarde 3 segundos antes de tentar novamente');
+    }
+    
+    // Rate limiting: máximo 3 tentativas por minuto
+    if (loginAttempts >= 3 && timeSinceLastAttempt < 60000) {
+      throw new Error('Muitas tentativas de login. Aguarde 1 minuto antes de tentar novamente');
+    }
+    
     try {
+      setIsLoginInProgress(true);
+      setLastLoginAttempt(now);
+      setLoginAttempts(prev => prev + 1);
+      
+      console.log('🔄 Tentando fazer login...');
       const response = await apiService.login(loginData);
       setUser(response.user);
       await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(response.user));
-    } catch (error) {
-      console.error('Erro ao fazer login:', error);
-      throw error;
+      
+      // Reset contador de tentativas em caso de sucesso
+      setLoginAttempts(0);
+      console.log('✅ Login realizado com sucesso');
+      
+      // Retornar informações sobre senha temporária se existir
+      return {
+        requirePasswordChange: response.requirePasswordChange,
+        warning: response.warning
+      };
+    } catch (error: any) {
+      console.error('❌ Erro ao fazer login:', error);
+      
+      // Processar erro com sistema de tratamento
+      const processedError = processError(error);
+      throw new Error(processedError.message);
+    } finally {
+      setIsLoginInProgress(false);
     }
   };
 
@@ -78,9 +123,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await apiService.register(registerData);
       setUser(response.user);
       await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(response.user));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao fazer registro:', error);
-      throw error;
+      
+      // Processar erro com sistema de tratamento
+      const processedError = processError(error);
+      throw new Error(processedError.message);
     }
   };
 
@@ -105,20 +153,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const updatedUser = await apiService.updateProfile(userData);
       setUser(updatedUser);
       await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(updatedUser));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao atualizar dados do usuário:', error);
-      throw error;
+      
+      // Processar erro com sistema de tratamento
+      const processedError = processError(error);
+      throw new Error(processedError.message);
+    }
+  };
+
+  const changeTempPassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      await apiService.updatePassword(currentPassword, newPassword);
+      
+      // Atualizar status do usuário após mudança de senha
+      if (user) {
+        const updatedUser = { ...user, tempPassword: false };
+        setUser(updatedUser);
+        await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(updatedUser));
+      }
+    } catch (error: any) {
+      console.error('Erro ao alterar senha temporária:', error);
+      
+      // Processar erro com sistema de tratamento
+      const processedError = processError(error);
+      throw new Error(processedError.message);
     }
   };
 
   const value = {
     user,
     isLoading,
+    isLoginInProgress,
+    loginAttempts,
     login,
     register,
     logout,
     updateUser,
     checkAuth,
+    changeTempPassword,
   };
 
   return (
@@ -126,4 +199,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-}; 
+};
+
+export default AuthProvider; 

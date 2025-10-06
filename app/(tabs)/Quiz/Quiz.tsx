@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import UserInfo from '../Components/UserInfo/Userinfo';
 import BackButton from '../Components/BackButton/BackButton';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../../contexts/AuthContext';
 import quizService from '../../../services/quizService';
+import quizAttemptService from '../../../services/quizAttemptService';
 import { Quiz, QuizQuestion, QuestionValidationResult } from '../../../services/api';
 import AppStyles, { AppColors, AppSpacing, AppTypography } from '../../../constants/AppStyles';
+import { getLevelColors, formatLevelDisplay } from '../../../constants/LevelColors';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -45,16 +47,24 @@ interface QuizState {
     totalScore: number;
     timeLeft: number;
     isLoading: boolean;
-    isAnswering: boolean; // Para prevenir múltiplas submissões
+    isAnswering: boolean;
+    retryCount: number; // Adicionado para controlar tentativas
 }
 
 const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     const { user } = useAuth();
+    
+    // Obter cores baseadas no nível do usuário
+    const userLevel = user?.level || 'aprendiz';
+    const levelColors = getLevelColors(userLevel);
+    
     const [startTime] = useState<Date>(new Date());
     const moduleId = route.params?.moduleId;
+    const isRetry = route.params?.isRetry || false;
+    const passedAttemptStatus = route.params?.attemptStatus;
     
-    // Estado centralizado do quiz
-    const [state, setState] = useState<QuizState>({
+    // ✅ REFERÊNCIA para garantir acesso ao estado mais recente
+    const stateRef = useRef<QuizState>({
         quiz: null,
         currentQuestionIndex: 0,
         selectedOption: null,
@@ -62,27 +72,51 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         feedbackData: null,
         answers: [],
         totalScore: 0,
-        timeLeft: 300, // 5 minutos
+        timeLeft: 300,
         isLoading: true,
-        isAnswering: false
+        isAnswering: false,
+        retryCount: 0 // Inicializado
     });
+    
+    // Estado centralizado do quiz
+    const [state, setState] = useState<QuizState>(() => {
+        const initialState = {
+            quiz: null,
+            currentQuestionIndex: 0,
+            selectedOption: null,
+            showFeedback: false,
+            feedbackData: null,
+            answers: [],
+            totalScore: 0,
+            timeLeft: 300,
+            isLoading: true,
+            isAnswering: false,
+            retryCount: 0 // Inicializado
+        };
+        
+        // ✅ Atualizar a referência sempre que o estado mudar
+        stateRef.current = initialState;
+        return initialState;
+    });
+
+    // ✅ Effect para manter a referência sincronizada
+    useEffect(() => {
+        stateRef.current = state;
+    }, [state]);
 
     // Questão atual
     const currentQuestion = state.quiz?.questions[state.currentQuestionIndex];
 
-    // Função para carregar o quiz
+    // Função para carregar o quiz com limitação de tentativas
     const loadQuiz = useCallback(async () => {
         try {
             setState(prev => ({ ...prev, isLoading: true }));
             let quizData: Quiz | null = null;
 
-            // Determinar tipo de quiz e carregar dados apropriados
             if (moduleId === 'daily' || moduleId === 'daily-challenge' || moduleId === 'daily-challenge-mock') {
-                // Quiz de exercício diário
                 const daily = await quizService.getDailyChallenge();
                 quizData = { ...daily, id: daily.id || 'daily-challenge-mock' } as Quiz;
             } else {
-                // Quiz de módulo regular
                 quizData = await quizService.getQuiz(moduleId);
             }
 
@@ -91,37 +125,143 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     ...prev,
                     quiz: quizData,
                     isLoading: false,
-                    timeLeft: quizData.timeLimit || 300,
-                    answers: []
+                    timeLeft: (quizData?.timeLimit) || 300,
+                    answers: [],
+                    retryCount: 0 // ✅ Resetar contador de tentativas em caso de sucesso
                 }));
             } else {
                 throw new Error('Dados do quiz inválidos ou vazios');
             }
         } catch (error) {
             console.error('Erro ao carregar quiz:', error);
-            setState(prev => ({ ...prev, isLoading: false }));
-            Alert.alert(
-                'Erro ao Carregar Quiz',
-                'Não foi possível carregar o quiz. Verifique sua conexão e tente novamente.',
-                [
-                    { text: 'Tentar Novamente', onPress: loadQuiz },
-                    { text: 'Voltar', onPress: () => navigation.goBack() }
-                ]
-            );
+            
+            // ✅ Verificar se ainda há tentativas disponíveis e mostrar alerta apropriado
+            setState(prev => {
+                const newRetryCount = prev.retryCount + 1;
+                
+                // ✅ Mostrar alerta apropriado baseado no número de tentativas
+                if (newRetryCount <= 1) {
+                    // ✅ Primeira tentativa - permitir tentar novamente
+                    setTimeout(() => {
+                        Alert.alert(
+                            'Erro ao Carregar Quiz',
+                            'Não foi possível carregar o quiz. Verifique sua conexão e tente novamente.',
+                            [
+                                { text: 'Tentar Novamente', onPress: loadQuiz },
+                                { text: 'Voltar', onPress: () => navigation.goBack() }
+                            ]
+                        );
+                    }, 0);
+                } else {
+                    // ✅ Sem mais tentativas - apenas voltar
+                    setTimeout(() => {
+                        Alert.alert(
+                            'Erro ao Carregar Quiz',
+                            'Não foi possível carregar o quiz após várias tentativas. Verifique sua conexão e tente novamente mais tarde.',
+                            [
+                                { text: 'Voltar', onPress: () => navigation.goBack() }
+                            ]
+                        );
+                    }, 0);
+                }
+                
+                return { 
+                    ...prev, 
+                    isLoading: false,
+                    retryCount: newRetryCount
+                };
+            });
         }
     }, [moduleId, navigation]);
 
-    // Effect para validação inicial e carregamento
+    // Effect para validação inicial e carregamento com guard de cooldown
     useEffect(() => {
-        if (!moduleId || moduleId === 'default') {
-            setTimeout(() => {
-                Alert.alert('Erro', 'ID do módulo inválido. Volte e tente novamente.');
-                navigation.goBack();
-            }, 0);
-            return;
+        (async () => {
+            if (!moduleId || moduleId === 'default') {
+                setTimeout(() => {
+                    Alert.alert('Erro', 'ID do módulo inválido. Volte e tente novamente.');
+                    navigation.goBack();
+                }, 0);
+                return;
+            }
+
+            // Guard imediato via params
+            if (passedAttemptStatus) {
+                if (passedAttemptStatus.reason === 'completed') {
+                    Alert.alert('Quiz Concluído', 'Este quiz já foi completado com sucesso!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+                    return;
+                }
+                if (passedAttemptStatus.attempts?.cooldownUntil) {
+                    const cooldownEnd = new Date(passedAttemptStatus.attempts.cooldownUntil);
+                    if (Date.now() < cooldownEnd.getTime()) {
+                        const minutes = Math.ceil((cooldownEnd.getTime() - Date.now()) / 60000);
+                        Alert.alert('⏰ Quiz em Cooldown', `Aguarde ${minutes} minuto(s) para tentar novamente.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+                        return;
+                    }
+                }
+            }
+
+            // Checagem local de cooldown
+            try {
+                const cooldownInfo = await quizAttemptService.getCooldownInfo(moduleId, moduleId);
+                if (cooldownInfo.isOnCooldown) {
+                    const timeStr = `${cooldownInfo.timeRemaining.minutes}:${cooldownInfo.timeRemaining.seconds.toString().padStart(2, '0')}`;
+                    Alert.alert('⏰ Quiz em Cooldown', `Este quiz está bloqueado por ${timeStr} minutos.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+                    return;
+                }
+            } catch {}
+
+            // ✅ VERIFICAR TENTATIVAS NO BACKEND se for retry
+            if (isRetry && moduleId !== 'daily-challenge' && moduleId !== 'daily-challenge-mock') {
+                checkBackendAttempts();
+            } else {
+                loadQuiz();
+            }
+        })();
+    }, [loadQuiz, isRetry, moduleId, passedAttemptStatus, navigation]);
+
+    // ✅ FUNÇÃO PARA VERIFICAR TENTATIVAS NO BACKEND (COOLDOWN ESPECÍFICO POR QUIZ)
+    const checkBackendAttempts = async () => {
+        try {
+            console.log('🔍 Verificando tentativas no backend para quiz específico...');
+            
+            // ✅ VERIFICAÇÃO ESPECÍFICA POR QUIZ - não afeta outros quizzes
+            const attemptsFromParams = route.params?.attemptStatus?.attempts;
+            if (attemptsFromParams?.cooldownUntil) {
+                const cooldownEnd = new Date(attemptsFromParams.cooldownUntil);
+                const now = new Date();
+                
+                if (now < cooldownEnd) {
+                    // ✅ COOLDOWN ATIVO APENAS PARA ESTE QUIZ - Mostrar timer e bloquear
+                    const timeRemaining = Math.ceil((cooldownEnd.getTime() - now.getTime()) / (1000 * 60));
+                    
+                    Alert.alert(
+                        '⏰ Quiz em Cooldown',
+                        `Este quiz específico está em suspensão temporária.\n\nAguarde ${timeRemaining} minutos antes de tentar novamente.\n\n💡 Outros quizzes não são afetados!`,
+                        [
+                            { 
+                                text: 'Voltar ao Menu', 
+                                onPress: () => navigation.reset({
+                                    index: 0,
+                                    routes: [{ name: 'ProfileHome' }]
+                                })
+                            }
+                        ]
+                    );
+                    return;
+                }
+            }
+            
+            // ✅ COOLDOWN EXPIRADO PARA ESTE QUIZ - Permitir carregar quiz
+            console.log('✅ Cooldown expirado para este quiz específico - carregando quiz...');
+            loadQuiz();
+            
+        } catch (error) {
+            console.error('❌ Erro ao verificar tentativas:', error);
+            // Em caso de erro, permitir carregar o quiz
+            loadQuiz();
         }
-        loadQuiz();
-    }, [loadQuiz]);
+    };
 
     // Timer do quiz
     useEffect(() => {
@@ -148,11 +288,10 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     };
 
     /**
-     * 📝 Processa a seleção de uma opção pelo usuário
-     * Implementa feedback instantâneo com validação no backend
-     * @param optionIndex Índice da opção selecionada (0-3)
+     * 🎯 Função otimizada para processar seleção de opção
+     * Resolve problemas de timing e sincronização
      */
-    const handleOptionSelect = async (optionIndex: number) => {
+    const handleOptionSelect = useCallback(async (optionIndex: number) => {
         // ✅ Validações de segurança
         if (!currentQuestion || state.isAnswering || state.selectedOption !== null) {
             console.log('⚠️ Seleção de opção bloqueada:', {
@@ -165,7 +304,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
 
         console.log(`🎯 Processando seleção da opção ${optionIndex} para questão ${state.currentQuestionIndex + 1}`);
 
-        // ⏳ Marcar como processando para evitar duplas seleções
+        // ⏳ Marcar como processando
         setState(prev => ({
             ...prev,
             selectedOption: optionIndex,
@@ -173,7 +312,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         }));
 
         try {
-            // 🔍 Validar resposta no backend para feedback instantâneo
+            // 🔍 Validar resposta no backend
             const validation = await quizService.validateQuestion(
                 state.quiz!.id,
                 state.currentQuestionIndex,
@@ -182,13 +321,9 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
 
             console.log(`${validation.isCorrect ? '✅' : '❌'} Resposta ${validation.isCorrect ? 'correta' : 'incorreta'}: +${validation.points} pontos`);
 
-            // 📊 Atualizar estado com feedback e pontuação
-            setState(prev => ({
-                ...prev,
-                showFeedback: true,
-                feedbackData: validation,
-                totalScore: prev.totalScore + validation.points,
-                answers: [
+            // 📊 Atualizar estado com nova resposta
+            setState(prev => {
+                const newAnswers = [
                     ...prev.answers,
                     {
                         questionIndex: prev.currentQuestionIndex,
@@ -196,18 +331,50 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                         isCorrect: validation.isCorrect,
                         points: validation.points
                     }
-                ]
-            }));
-
-            // ⏰ Tempo para o usuário ler o feedback (3s para explicação)
-            setTimeout(() => {
-                proceedToNextQuestion();
-            }, 3000);
+                ];
+                
+                console.log('🔍 Estado atualizado:');
+                console.log('  Questão atual:', prev.currentQuestionIndex + 1);
+                console.log('  Resposta selecionada:', optionIndex);
+                console.log('  Validação:', validation.isCorrect);
+                console.log('  Total de respostas:', newAnswers.length);
+                console.log('  Respostas corretas:', newAnswers.filter(a => a.isCorrect).length);
+                console.log('  Todas as respostas:', newAnswers);
+                
+                // 🔍 Verificar se é a última questão
+                const isLastQuestion = prev.currentQuestionIndex >= (prev.quiz?.questions.length || 0) - 1;
+                console.log(`  É a última questão? ${isLastQuestion}`);
+                console.log(`  Questão atual: ${prev.currentQuestionIndex + 1}/${prev.quiz?.questions.length}`);
+                
+                // Se for a última questão, finalizar com delay para sincronização
+                if (isLastQuestion) {
+                    console.log('🎯 Última questão - finalizando quiz...');
+                    setTimeout(() => {
+                        // ✅ Usar a referência para garantir estado atualizado
+                        const currentState = stateRef.current;
+                        console.log('🔍 Estado final antes de finalizar:', currentState.answers);
+                        finishQuiz();
+                    }, 150);
+                } else {
+                    // ⏰ Tempo para o usuário ler o feedback
+                    setTimeout(() => {
+                        proceedToNextQuestion();
+                    }, 3000);
+                }
+                
+                return {
+                    ...prev,
+                    showFeedback: true,
+                    feedbackData: validation,
+                    totalScore: prev.totalScore + validation.points,
+                    answers: newAnswers
+                };
+            });
 
         } catch (error) {
             console.error('❌ Erro ao validar questão:', error);
             
-            // 🛡️ Fallback: Continuar mesmo com erro para não travar o quiz
+            // 🛡️ Fallback para erro
             const fallbackAnswer = {
                 questionIndex: state.currentQuestionIndex,
                 selectedAnswer: optionIndex,
@@ -235,24 +402,22 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 answers: [...prev.answers, fallbackAnswer]
             }));
 
-            // ⏰ Tempo menor para erro (2s)
             setTimeout(() => {
                 proceedToNextQuestion();
             }, 2000);
         }
-    };
+    }, [currentQuestion, state.isAnswering, state.selectedOption, state.quiz, state.currentQuestionIndex]);
 
-    // Função para avançar para próxima questão
-    const proceedToNextQuestion = () => {
+    // ✅ Função otimizada para avançar para próxima questão
+    const proceedToNextQuestion = useCallback(() => {
         setState(prev => {
             const isLastQuestion = prev.currentQuestionIndex >= (prev.quiz?.questions.length || 0) - 1;
             
             if (isLastQuestion) {
-                // Finalizar quiz
-                finishQuiz();
+                console.log('⚠️ proceedToNextQuestion chamado para última questão - não deveria acontecer');
                 return prev;
             } else {
-                // Próxima questão
+                console.log('✅ Avançando para próxima questão');
                 return {
                     ...prev,
                     currentQuestionIndex: prev.currentQuestionIndex + 1,
@@ -263,30 +428,25 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 };
             }
         });
-    };
+    }, []);
 
-    // Função para finalizar quiz com métricas claras e cálculo correto
-    const finishQuiz = () => {
-        if (!state.quiz) return;
+    // ✅ Função otimizada para finalizar quiz
+    const finishQuiz = useCallback(() => {
+        const currentState = stateRef.current;
+        if (!currentState.quiz) return;
 
         const timeSpent = Math.floor((new Date().getTime() - startTime.getTime()) / 1000);
-        const totalQuestions = state.quiz.questions.length;
-        const correctAnswers = state.answers.filter(answer => answer.isCorrect).length;
-        const wrongAnswers = totalQuestions - correctAnswers;
+        const totalQuestions = currentState.quiz.questions.length;
+        
+        // ✅ CONTAGEM CORRETA: Contar respostas corretas e erradas individualmente
+        const correctAnswers = currentState.answers.filter(answer => answer.isCorrect).length;
+        const wrongAnswers = currentState.answers.filter(answer => !answer.isCorrect).length;
         
         // ✅ CÁLCULO CORRETO: Garantir que 100% dos acertos = 100%
         const percentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
         
-        console.log(`📊 Cálculo de percentual:
-        - Total de questões: ${totalQuestions}
-        - Respostas corretas: ${correctAnswers}  
-        - Respostas erradas: ${wrongAnswers}
-        - Percentual calculado: ${percentage}%`);
-        
-        // Verificação de consistência
-        if (correctAnswers === totalQuestions && percentage !== 100) {
-            console.error('⚠️ ERRO: Todas as respostas corretas mas percentual não é 100%');
-        }
+        // ✅ DETERMINAR SE PASSOU: 70% ou mais é considerado sucesso
+        const passed = percentage >= 70;
         
         // Gerar feedback baseado no desempenho
         let performanceFeedback = '';
@@ -300,29 +460,34 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             performanceFeedback = '💪 Continue se esforçando! A prática leva à perfeição.';
         }
 
-        // Navegar para tela de resultados com dados completos
+        // ✅ VERIFICAR SE É DESAFIO DIÁRIO E CHAMAR CALLBACK
+        const isDailyChallenge = moduleId === 'daily' || moduleId === 'daily-challenge' || moduleId === 'daily-challenge-mock';
+        
+        // Se for desafio diário e tiver callback, chamar imediatamente
+        if (isDailyChallenge && route.params?.onComplete) {
+            route.params.onComplete();
+        }
+
+        // Navegar para tela de resultados
         setTimeout(() => {
-            navigation.navigate('QuizResults', {
-                // Métricas principais
+            navigation.replace('QuizResults', {
                 totalQuestions,
                 correctAnswers,
                 wrongAnswers,
                 percentage,
-                totalScore: state.totalScore,
+                totalScore: currentState.totalScore,
                 timeSpent,
-                
-                // Dados detalhados
-                quizTitle: state.quiz!.title,
-                answers: state.answers,
+                quizTitle: currentState.quiz!.title,
+                answers: currentState.answers,
                 feedback: performanceFeedback,
-                
-                // Informações do quiz
-                quizId: state.quiz!.id,
+                quizId: currentState.quiz!.id,
                 moduleId: moduleId,
-                isDailyChallenge: moduleId === 'daily' || moduleId === 'daily-challenge' || moduleId === 'daily-challenge-mock'
+                isDailyChallenge,
+                passed,
+                fromQuiz: true
             });
         }, 0);
-    };
+    }, [startTime, moduleId, navigation]);
 
     const handlePressProfileHome = () => {
         Alert.alert(
@@ -343,11 +508,16 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     <View style={styles.backButtoncontainer}>
                         <BackButton onPress={handlePressProfileHome} />
                     </View>
-                    <UserInfo userName={user?.name || "Usuário"} userSubtitle="Aprendiz" />
+                    <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
                 </View>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#007AFF" />
+                    <ActivityIndicator size="large" color={levelColors.primary} />
                     <Text style={styles.loadingText}>Carregando quiz...</Text>
+                    {state.retryCount > 0 && (
+                        <Text style={styles.retryText}>
+                            Tentativa {state.retryCount + 1}/2
+                        </Text>
+                    )}
                 </View>
             </View>
         );
@@ -361,7 +531,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     <View style={styles.backButtoncontainer}>
                         <BackButton onPress={handlePressProfileHome} />
                     </View>
-                    <UserInfo userName={user?.name || "Usuário"} userSubtitle="Aprendiz" />
+                    <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
                 </View>
                 <View style={styles.loadingContainer}>
                     <Text style={styles.loadingText}>Quiz não encontrado</Text>
@@ -381,19 +551,19 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 <View style={styles.backButtoncontainer}>
                     <BackButton onPress={handlePressProfileHome} />
                 </View>
-                <UserInfo userName={user?.name || "Usuário"} userSubtitle="Aprendiz" />
+                <UserInfo useRealTimeData={true} />
             </View>
 
             {/* Timer e Info do Quiz */}
             <View style={styles.timerContainer}>
                 <Text style={styles.timerText}>⏱️ {formatTime(state.timeLeft)}</Text>
-                <Text style={styles.scoreText}>Pontos: {state.totalScore}</Text>
+                <Text style={[styles.scoreText, { color: levelColors.primary }]}>Pontos: {state.totalScore}</Text>
             </View>
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
                 <View style={styles.progressBarBackground}>
-                    <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
+                    <View style={[styles.progressBar, { width: `${progress * 100}%`, backgroundColor: levelColors.primary }]} />
                 </View>
                 <Text style={styles.progressText}>
                     {`${state.currentQuestionIndex + 1}/${state.quiz?.questions.length || 0}`}
@@ -422,7 +592,8 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                                 key={index}
                                 style={[
                                     styles.optionButton,
-                                    isSelected && styles.selectedButton,
+                                    { backgroundColor: levelColors.primary },
+                                    isSelected && { backgroundColor: levelColors.accent, borderColor: levelColors.accent },
                                     isSelectedAndCorrect && styles.correctButton,
                                     isSelectedAndWrong && styles.incorrectButton,
                                     isCorrectOption && !isSelected && styles.correctAnswerButton
@@ -457,7 +628,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                             <Text style={styles.feedbackTitle}>
                                 {state.feedbackData.isCorrect ? '🎉 Correto!' : '❌ Incorreto'}
                             </Text>
-                            <Text style={styles.feedbackPoints}>
+                            <Text style={[styles.feedbackPoints, { color: levelColors.primary }]}>
                                 +{state.feedbackData.points} pontos
                             </Text>
                         </View>
@@ -479,7 +650,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 {/* Loading durante validação */}
                 {state.isAnswering && !isShowingFeedback && (
                     <View style={styles.validatingContainer}>
-                        <ActivityIndicator size="small" color="#007AFF" />
+                        <ActivityIndicator size="small" color={levelColors.primary} />
                         <Text style={styles.validatingText}>Validando resposta...</Text>
                     </View>
                 )}
@@ -635,27 +806,6 @@ const styles = StyleSheet.create({
     selectedOptionText: {
         color: '#FFFFFF',
     },
-    resultContainer: {
-        marginTop: Math.max(20, screenHeight * 0.025),
-        padding: Math.max(16, screenWidth * 0.04),
-        backgroundColor: '#F8F9FA',
-        borderRadius: Math.max(10, screenWidth * 0.025),
-        borderLeftWidth: 4,
-        borderLeftColor: '#0A8CD6',
-    },
-    resultText: {
-        fontWeight: 'bold',
-        fontSize: Math.max(18, screenWidth * 0.045),
-        marginBottom: Math.max(8, screenHeight * 0.01),
-        fontFamily: 'Roboto-Bold',
-    },
-
-    explanationText: {
-        fontSize: Math.max(14, screenWidth * 0.035),
-        color: '#545454',
-        lineHeight: Math.max(20, screenHeight * 0.025),
-        fontFamily: 'Roboto-Regular',
-    },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -668,7 +818,13 @@ const styles = StyleSheet.create({
         color: '#666',
         fontFamily: 'Poppins-Regular',
     },
-    // Estilos para feedback instantâneo
+    retryText: {
+        marginTop: 8,
+        fontSize: 14,
+        color: '#999',
+        fontFamily: 'Roboto-Regular',
+        fontStyle: 'italic',
+    },
     feedbackContainer: {
         marginTop: 20,
         backgroundColor: '#FFFFFF',

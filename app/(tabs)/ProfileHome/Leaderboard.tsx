@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../../services/api';
 
@@ -37,7 +37,7 @@ export default function Leaderboard() {
   const getRankIcon = (rank: number) => {
     switch (rank) {
       case 1:
-        return { icon: 'trophy', color: '#FFD700' };
+        return { icon: 'trophy', color: '#FF8C00' };
       case 2:
         return { icon: 'medal', color: '#C0C0C0' };
       case 3:
@@ -79,7 +79,7 @@ export default function Leaderboard() {
         
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <MaterialCommunityIcons name="progress-check" size={16} color="#0087D3" />
+                            <MaterialCommunityIcons name="chart-line" size={16} color="#0087D3" />
             <Text style={styles.statValue}>{entry.progress}%</Text>
           </View>
           <View style={styles.statItem}>

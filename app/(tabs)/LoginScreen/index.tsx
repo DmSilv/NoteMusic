@@ -8,72 +8,67 @@ import SubTitleComponent from '../Components/SubTitle/SubTitle';
 import PrimaryButton from '../Components/Form/Button/PrimaryButton/PrimaryButton';
 import Input from '../Components/Form/Input/Input';
 import { useAuth } from '../../contexts/AuthContext';
+import useFormValidation from '../../../hooks/useFormValidation';
+import useAsyncOperation from '../../../hooks/useAsyncOperation';
+import useErrorHandler from '../../../hooks/useErrorHandler';
 
 export default function LoginScreen({ navigation }) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { login } = useAuth();
-  
-  // Estados para validação
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { showError, showSuccess } = useErrorHandler();
+  
+  // Hook para validação de formulário
+  const { formState, errors, isValid, setValue, validateField, validateAll } = useFormValidation(
+    { email: '', password: '' },
+    {
+      email: { required: true, email: true },
+      password: { required: true, minLength: 6 }
+    }
+  );
+  
+  // Hook para operação assíncrona de login
+  const { isLoading, execute: executeLogin } = useAsyncOperation();
 
   const handlePressRemenberPassword = () => {
     navigation.navigate('RemenberPassword');
   };
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
 
-  const validateForm = () => {
-    let isValid = true;
-    
-    // Validar email
-    if (!email.trim()) {
-      setEmailError('E-mail é obrigatório');
-      isValid = false;
-    } else if (!validateEmail(email)) {
-      setEmailError('E-mail inválido');
-      isValid = false;
-    } else {
-      setEmailError('');
-    }
-
-    // Validar senha
-    if (!password.trim()) {
-      setPasswordError('Senha é obrigatória');
-      isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Senha deve ter pelo menos 6 caracteres');
-      isValid = false;
-    } else {
-      setPasswordError('');
-    }
-
-    return isValid;
-  };
 
   const handlePressProfile = async () => {
-    if (!validateForm()) {
+    if (!validateAll()) {
       return;
     }
 
-    setIsLoading(true);
-    
     try {
-      await login({ email, password });
-      navigation.navigate('ProfileHome');
+      const loginResult = await executeLogin(async () => {
+        return await login({ 
+          email: formState.email.value, 
+          password: formState.password.value 
+        });
+      });
+      
+      // Verificar se é necessário alterar senha temporária
+      if (loginResult?.requirePasswordChange) {
+        Alert.alert(
+          'Senha Temporária Detectada 🔒',
+          loginResult.warning || 'Você deve alterar sua senha temporária antes de continuar.',
+          [
+            {
+              text: 'Alterar Senha',
+              onPress: () => navigation.navigate('ChangePassword')
+            }
+          ],
+          { cancelable: false }
+        );
+      } else {
+        navigation.navigate('ProfileHome');
+      }
     } catch (error) {
       Alert.alert('Erro', 'Email ou senha incorretos. Tente novamente.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -130,6 +125,7 @@ export default function LoginScreen({ navigation }) {
             title={'Pronto para dar o play?'} 
             color={''} 
             fontFamily={''} 
+            truncate={false}
           />
           <SubTitleComponent 
             subtitle="Prepare-se para uma experiência única de aprendizado e música." 
@@ -147,18 +143,16 @@ export default function LoginScreen({ navigation }) {
             MarginRight={0} 
           />
           <Input 
-            onChangeText={(text) => {
-              setEmail(text);
-              if (emailError) setEmailError('');
-            }}
+            onChangeText={(text) => setValue('email', text)}
             placeholder={"Digite seu melhor e-mail"} 
             secureTextEntry={false} 
             styleWidth={{ width: windowWidth * 0.85 }} 
-            value={email}
-            error={emailError}
+            value={formState.email.value}
+            error={errors.email}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            onBlur={() => validateField('email')}
           />
 
           <SubTitleComponent 
@@ -170,17 +164,15 @@ export default function LoginScreen({ navigation }) {
           />
           <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
             <Input 
-              onChangeText={(text) => {
-                setPassword(text);
-                if (passwordError) setPasswordError('');
-              }}
+              onChangeText={(text) => setValue('password', text)}
               placeholder={"Digite sua senha"} 
               secureTextEntry={!showPassword} 
               styleWidth={{ width: windowWidth * 0.85 }} 
-              value={password}
-              error={passwordError}
+              value={formState.password.value}
+              error={errors.password}
               autoCapitalize="none"
               autoCorrect={false}
+              onBlur={() => validateField('password')}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIconContainer}>
               <Image

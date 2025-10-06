@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../../services/api';
 
@@ -43,7 +43,7 @@ export default function Achievements() {
       <MaterialCommunityIcons 
         name={achievement.icon as any} 
         size={32} 
-        color={achievement.unlocked ? '#FFD700' : '#CCC'} 
+        color={achievement.unlocked ? '#FF8C00' : '#CCC'} 
       />
       <View style={styles.achievementInfo}>
         <Text style={[

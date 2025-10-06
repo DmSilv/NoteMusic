@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import PrimaryButton from '../Components/Button/PrimaryButton';
+import { getLevelColors } from '../../../constants/LevelColors';
 
 const steps = [
   {
@@ -19,7 +20,7 @@ const steps = [
       'Nunca estudei',
       'Sei o básico (notas, figuras)',
       'Já estudei escalas, intervalos, etc.',
-      'Avançado (harmonia, análise, etc)',
+      'Maestro (harmonia, análise, etc)',
     ],
   },
   {
@@ -36,6 +37,9 @@ const steps = [
 export default function SelectLevelPerson({ navigation }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
+  
+  // Cores baseadas no nível padrão (aprendiz)
+  const levelColors = getLevelColors('aprendiz');
 
   const handleSelect = (option: string) => {
     const newAnswers = [...answers];
@@ -57,17 +61,22 @@ export default function SelectLevelPerson({ navigation }) {
       {/* Barra de progresso */}
       {Platform.OS === 'android' ? (
         <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBar, { width: `${((step + 1) / steps.length) * 100}%` }]} />
+          <View style={[styles.progressBar, { width: `${((step + 1) / steps.length) * 100}%`, backgroundColor: levelColors.primary }]} />
         </View>
       ) : null}
-      <Text style={styles.stepText}>Passo {step + 1} de {steps.length}</Text>
+      <Text style={[styles.stepText, { color: levelColors.primary }]}>Passo {step + 1} de {steps.length}</Text>
       <Text style={styles.question}>{steps[step].question}</Text>
       {steps[step].options.map(option => (
         <TouchableOpacity
           key={option}
           style={[
             styles.option,
-            answers[step] === option && styles.optionSelected,
+            { backgroundColor: levelColors.secondary },
+            answers[step] === option && { 
+              borderWidth: 2, 
+              borderColor: levelColors.primary, 
+              backgroundColor: levelColors.accent 
+            },
           ]}
           onPress={() => handleSelect(option)}
         >

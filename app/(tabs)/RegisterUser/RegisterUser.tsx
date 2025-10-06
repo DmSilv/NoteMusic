@@ -9,6 +9,7 @@ import SubTitleComponent from '../Components/SubTitle/SubTitle';
 import PrimaryButton from '../Components/Form/Button/PrimaryButton/PrimaryButton';
 import Input from '../Components/Form/Input/Input';
 import { useAuth } from '../../contexts/AuthContext';
+import { validateName, validateEmail, validatePassword, validatePasswordConfirmation } from '../../utils/validation';
 
 export default function RegisterUser({ navigation }) {
   const scrollViewRef = useRef<ScrollView>(null); 
@@ -30,6 +31,24 @@ export default function RegisterUser({ navigation }) {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
+  // Função para validar nome
+  const validateName = (name: string) => {
+    if (!name.trim()) {
+      setNameError('Nome é obrigatório');
+      return false;
+    }
+    if (name.length < 2) {
+      setNameError('Nome deve ter no mínimo 2 caracteres');
+      return false;
+    }
+    if (name.length > 15) {
+      setNameError('Nome deve ter no máximo 15 caracteres (apenas primeiro nome)');
+      return false;
+    }
+    setNameError('');
+    return true;
+  };
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -55,12 +74,9 @@ export default function RegisterUser({ navigation }) {
   const validateForm = () => {
     let isValid = true;
     
-    // Validar nome
-    if (!name.trim()) {
-      setNameError('Nome é obrigatório');
+    // Validar nome usando a função específica
+    if (!validateName(name)) {
       isValid = false;
-    } else {
-      setNameError('');
     }
 
     // Validar email
@@ -137,22 +153,34 @@ export default function RegisterUser({ navigation }) {
             <Image source={musico} style={styles.image} />
           </View>
 
-          <TitleComponent color={''} fontFamily={''} title={'Vamos criar sua conta'} fontSize={''}></TitleComponent>
+          <TitleComponent color={''} fontFamily={''} title={'Vamos criar sua conta'} fontSize={''} truncate={false}></TitleComponent>
 
           <SubTitleComponent fontFamily={''} marginRight={''} marginTop={''} color={''} subtitle={'Preencha seus dados e prepare-se para uma incrível aventura musical!'}></SubTitleComponent>
 
           <SubTitleComponent subtitle={'Nome completo'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
           <Input 
             onChangeText={(text) => {
+              // Limitar a 15 caracteres (apenas primeiro nome)
+              if (text.length > 15) {
+                return; // Não permitir mais de 15 caracteres
+              }
+              
               setName(text);
-              if (nameError) setNameError('');
+              // Validar em tempo real
+              if (text.length > 0) {
+                validateName(text);
+              } else {
+                setNameError('');
+              }
             }}
-            placeholder={'Digite seu nome completo'} 
+            onBlur={() => validateName(name)}
+            placeholder={'Seu primeiro nome'} 
             secureTextEntry={false} 
             styleWidth={{ width: windowWidth * 0.85 }}
             value={name}
             error={nameError}
             autoCapitalize="words"
+            maxLength={15}
           />
 
           <SubTitleComponent subtitle={'E-mail'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>

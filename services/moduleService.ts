@@ -26,7 +26,7 @@ class ModuleService {
       }
     } catch (error) {
       console.error('Erro ao buscar módulos:', error);
-      return [];
+      return []; 
     }
   }
 
@@ -45,7 +45,8 @@ class ModuleService {
   async getModulesByCategory(): Promise<ModuleCategory[]> {
     try {
       const modules = await this.getAllModules();
-      const categoriesResponse = await apiService.request('/modules/categories');
+      
+      console.log('📚 Módulos carregados:', modules.length);
       
       // Verificar se modules é um array válido
       if (!Array.isArray(modules)) {
@@ -53,12 +54,35 @@ class ModuleService {
         return [];
       }
       
-      return categoriesResponse.categories.map((category: any) => ({
-        name: category.name,
-        modules: modules.filter(module => module && module.category === category.id)
-      }));
+      // Agrupar módulos por categoria
+      const modulesByCategory = modules.reduce((acc, module) => {
+        const category = module.category || 'geral';
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(module);
+        return acc;
+      }, {} as Record<string, Module[]>);
+      
+      // Converter para array de categorias
+      const result = Object.entries(modulesByCategory).map(([category, categoryModules]) => {
+        console.log(`📁 Categoria: ${category} - Módulos: ${categoryModules.length}`);
+        
+        // Log dos módulos para debug
+        categoryModules.forEach((module, index) => {
+          console.log(`   Módulo ${index + 1}: ${module.title} - Nível: ${module.level}`);
+        });
+        
+        return {
+          name: category,
+          modules: categoryModules
+        };
+      });
+      
+      console.log('📋 Resultado final:', result.length, 'categorias');
+      return result;
     } catch (error) {
-      console.error('Erro ao carregar categorias:', error);
+      console.error('❌ Erro ao carregar categorias:', error);
       return [];
     }
   }

@@ -17,6 +17,8 @@ import Quiz from './(tabs)/Quiz/Quiz';
 import QuizResults from './(tabs)/Quiz/QuizResults';
 import ContentListCategory from './(tabs)/ModuleCategory/ContentListCategory/ContentListCategory';
 import QuizIntroScreen from './(tabs)/Quiz/QuizIntroScreen/QuizIntroScreen';
+import ChangePassword from './(tabs)/ChangePassword/ChangePassword';
+import LevelStats from './(tabs)/LevelStats/LevelStats';
 const Stack = createNativeStackNavigator();
 
 const fetchFonts = () => {
@@ -74,6 +76,8 @@ function App() {
               <Stack.Screen name="QuizResults" component={QuizResults} options={{ headerShown: false }} />
               <Stack.Screen name="ContentListCategory" component={ContentListCategory} options={{ headerShown: false }} />
               <Stack.Screen name="QuizIntroScreen" component={QuizIntroScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="ChangePassword" component={ChangePassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
+              <Stack.Screen name="LevelStats" component={LevelStats} options={{ headerShown: false }} />
 
             </Stack.Navigator>
           </SafeAreaView>

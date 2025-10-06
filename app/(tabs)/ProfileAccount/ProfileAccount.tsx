@@ -71,9 +71,16 @@ interface ModuleCategoryProps {
         const newErrors = { ...errors };
         
         // Validar nome
-        if (formData.name.trim() && formData.name.trim().length < 2) {
-            newErrors.name = 'Nome deve ter pelo menos 2 caracteres';
-            isValid = false;
+        if (formData.name.trim()) {
+            if (formData.name.trim().length < 2) {
+                newErrors.name = 'Nome deve ter pelo menos 2 caracteres';
+                isValid = false;
+            } else if (formData.name.trim().length > 15) {
+                newErrors.name = 'Nome deve ter no máximo 15 caracteres (apenas primeiro nome)';
+                isValid = false;
+            } else {
+                newErrors.name = '';
+            }
         } else {
             newErrors.name = '';
         }
@@ -204,8 +211,12 @@ interface ModuleCategoryProps {
         
         switch (field) {
             case 'name':
-                if (value.trim() && value.trim().length < 2) {
-                    error = 'Nome deve ter pelo menos 2 caracteres';
+                if (value.trim()) {
+                    if (value.trim().length < 2) {
+                        error = 'Nome deve ter pelo menos 2 caracteres';
+                    } else if (value.trim().length > 15) {
+                        error = 'Nome deve ter no máximo 15 caracteres (apenas primeiro nome)';
+                    }
                 }
                 break;
             case 'email':
@@ -232,6 +243,11 @@ interface ModuleCategoryProps {
     };
 
     const handleInputChange = (field: string, value: string) => {
+        // Para o campo nome, limitar a 15 caracteres (apenas primeiro nome)
+        if (field === 'name' && value.length > 15) {
+            return; // Não permitir mais de 15 caracteres
+        }
+        
         setFormData(prev => ({
             ...prev,
             [field]: value
@@ -268,7 +284,7 @@ interface ModuleCategoryProps {
                     <View style={styles.containerImage}>
                         <Image source={EditAccount} style={styles.image} />
                     </View>
-                    <TitleComponent color={''} fontFamily={''} title={'Gerenciar Conta'} fontSize={''} />
+                    <TitleComponent color={''} fontFamily={''} title={'Gerenciar Conta'} fontSize={''} truncate={false} />
                     <SubTitleComponent subtitle={'Preencha apenas os campos que deseja alterar na sua conta.'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
                     
                     <View style={styles.infoContainer}>
@@ -280,11 +296,12 @@ interface ModuleCategoryProps {
                     <SubTitleComponent subtitle={'Nome completo'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
                     <Input 
                         onChangeText={(text) => handleInputChange('name', text)} 
-                        placeholder={'Digite seu nome completo'} 
+                        placeholder={'Digite apenas seu primeiro nome (máx. 15 caracteres)'} 
                         secureTextEntry={false} 
                         styleWidth={{ width: windowWidth * 0.85 }}
                         value={formData.name}
                         error={errors.name}
+                        maxLength={15}
                     />
 
                     <SubTitleComponent subtitle={'E-mail'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
