@@ -1,5 +1,6 @@
 import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import garota_sentada from '../../../assets/images/autenticacao.png';
 import eyeIcon from '../../../assets/images/eye.png'; 
 import eyeOffIcon from '../../../assets/images/eye-off.png'; 
@@ -14,9 +15,10 @@ import useAsyncOperation from '../../../hooks/useAsyncOperation';
 
 interface ChangePasswordProps {
   navigation: any;
+  route?: any;
 }
 
-export default function ChangePasswordScreen({ navigation }: ChangePasswordProps) {
+export default function ChangePasswordScreen({ navigation, route }: ChangePasswordProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -25,9 +27,12 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordProps
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { changeTempPassword, user } = useAuth();
   
+  // Obter senha temporária dos parâmetros de navegação
+  const tempPassword = route?.params?.tempPassword;
+  
   // Hook para validação de formulário
   const { formState, errors, setValue, validateField, validateAll } = useFormValidation(
-    { currentPassword: '', newPassword: '', confirmPassword: '' },
+    { currentPassword: tempPassword || '', newPassword: '', confirmPassword: '' },
     {
       currentPassword: { required: true },
       newPassword: { required: true, minLength: 6 },
@@ -95,11 +100,12 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordProps
   }, []);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.scrollViewContent}
@@ -201,7 +207,8 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordProps
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

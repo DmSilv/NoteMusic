@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '../../Components/UserInfo/Userinfo';
@@ -82,6 +83,21 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
 
         return unsubscribe;
     }, [navigation, modules]);
+
+    // Recarregar status quando route.params indicar que houve atualização
+    useEffect(() => {
+        if (route.params?.refreshStatus && modules.length > 0) {
+            console.log('🔄 Atualizando status após conclusão de quiz...');
+            loadCompletionStatus(modules);
+            loadAttemptStatus(modules);
+            
+            // Limpar parâmetro para não recarregar repetidamente
+            navigation.setParams({ 
+                ...route.params, 
+                refreshStatus: undefined 
+            });
+        }
+    }, [route.params?.refreshStatus, modules]);
 
     const loadModules = async () => {
         try {
@@ -326,34 +342,31 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
 
     // Função para verificar se um módulo está disponível
     const isModuleAvailable = (index: number, isCompleted: boolean, moduleLevel?: string): boolean => {
-        // Primeiro módulo sempre disponível
-        if (index === 0) return true;
-        
-        // Módulos concluídos sempre disponíveis
-        if (isCompleted) return true;
-        
-        // Verificar nível do usuário
         const userLevel = user?.level || 'aprendiz';
         const moduleLevelLower = moduleLevel?.toLowerCase() || 'aprendiz';
         
-        // Bloquear módulos avançados para usuários aprendizes
-        if (userLevel === 'aprendiz' && (moduleLevelLower === 'maestro' || moduleLevelLower === 'virtuoso')) {
+        // Hierarquia de níveis
+        const levelHierarchy: { [key: string]: number } = {
+            'aprendiz': 1,
+            'virtuoso': 2,
+            'maestro': 3
+        };
+        
+        const userLevelValue = levelHierarchy[userLevel.toLowerCase()] || 1;
+        const moduleLevelValue = levelHierarchy[moduleLevelLower] || 1;
+        
+        // ✅ BLOQUEIO POR NÍVEL:
+        // Usuário só pode acessar módulos do seu nível ou inferiores
+        // Aprendiz (1): acessa apenas Aprendiz
+        // Virtuoso (2): acessa Aprendiz e Virtuoso
+        // Maestro (3): acessa todos
+        if (moduleLevelValue > userLevelValue) {
+            console.log(`🔒 Módulo "${moduleLevel}" bloqueado para usuário "${userLevel}"`);
             return false;
         }
         
-        // Bloquear módulos virtuosos para usuários aprendizes
-        if (userLevel === 'aprendiz' && moduleLevelLower === 'virtuoso') {
-            return false;
-        }
-        
-        // Verificar se o módulo anterior foi concluído (progressão sequencial)
-        const previousModule = modules[index - 1];
-        if (previousModule) {
-            const previousCompleted = completionStatus.get(previousModule.id) || false;
-            return previousCompleted;
-        }
-        
-        return false;
+        // ✅ Todos os módulos do mesmo nível ou inferior estão disponíveis
+        return true;
     };
 
     const renderLesson = ({ item, index }: { item: Module; index: number }) => {
@@ -469,7 +482,8 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+            <View style={styles.container}>
             <View style={styles.Header}>
                 <View style={styles.backButtoncontainer}>
                     <BackButton onPress={handlePressProfileHome} />
@@ -491,7 +505,8 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                 // adicionando extraData para evitar warnings de keys
                 extraData={modules?.length}
             />
-        </View>
+            </View>
+        </SafeAreaView>
     );
 };
 

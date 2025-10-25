@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import PrimaryButton from '../Components/Button/PrimaryButton';
 import { getLevelColors } from '../../../constants/LevelColors';
 
@@ -57,7 +58,8 @@ export default function SelectLevelPerson({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <View style={styles.container}>
       {/* Barra de progresso */}
       {Platform.OS === 'android' ? (
         <View style={styles.progressBarContainer}>
@@ -88,7 +90,8 @@ export default function SelectLevelPerson({ navigation }) {
         onPress={handleNext}
         disabled={!answers[step]}
       />
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 

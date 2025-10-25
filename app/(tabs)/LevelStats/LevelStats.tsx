@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
@@ -109,7 +110,8 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
   const nextLevelColors = getLevelColors(levelInfo.nextLevel);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <View style={styles.container}>
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Progresso de Nível</Text>
@@ -228,7 +230,8 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
           </View>
         )}
       </ScrollView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 

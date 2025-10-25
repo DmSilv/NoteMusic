@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '../../Components/UserInfo/Userinfo';
@@ -442,7 +443,8 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+            <View style={styles.container}>
             <View style={styles.Header}>
                 <View style={styles.backButtoncontainer}>
                     <BackButton onPress={handlePressProfileHome} />
@@ -536,7 +538,8 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                     </Text>
                 </TouchableOpacity>
             </ScrollView>
-        </View>
+            </View>
+        </SafeAreaView>
     );
 };
 

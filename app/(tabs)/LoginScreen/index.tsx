@@ -1,5 +1,7 @@
-import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, Switch } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import garota_sentada from '../../../assets/images/garota_janela.png';
 import eyeIcon from '../../../assets/images/eye.png'; 
 import eyeOffIcon from '../../../assets/images/eye-off.png'; 
@@ -12,31 +14,71 @@ import useFormValidation from '../../../hooks/useFormValidation';
 import useAsyncOperation from '../../../hooks/useAsyncOperation';
 import useErrorHandler from '../../../hooks/useErrorHandler';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const { login } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
-  const { showError, showSuccess } = useErrorHandler();
+  const { login, user, isLoading, isLoginInProgress, loginAttempts, deactivatedAccountDetected, clearDeactivatedFlag } = useAuth();
   
-  // Hook para validação de formulário
-  const { formState, errors, isValid, setValue, validateField, validateAll } = useFormValidation(
+  // Estados para formulário
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Hook de validação de formulário
+  const { formState, errors, setValue, validateField, validateAll } = useFormValidation(
     { email: '', password: '' },
-    {
-      email: { required: true, email: true },
-      password: { required: true, minLength: 6 }
+    { 
+      email: { required: true, email: true }, 
+      password: { required: true, minLength: 6 } 
     }
   );
+
+  // Hook para operações assíncronas
+  const { execute } = useAsyncOperation();
   
-  // Hook para operação assíncrona de login
-  const { isLoading, execute: executeLogin } = useAsyncOperation();
+  // Hook para tratamento de erros
+  const { showError } = useErrorHandler();
+
+  // Verificar se há credenciais salvas
+  useEffect(() => {
+    const checkSavedCredentials = async () => {
+      try {
+        const savedEmail = await AsyncStorage.getItem('@NoteMusic:savedEmail');
+        const savedPassword = await AsyncStorage.getItem('@NoteMusic:savedPassword');
+        const autoLoginEnabled = await AsyncStorage.getItem('@NoteMusic:autoLogin');
+        
+        console.log('🔍 Verificando credenciais salvas...');
+        console.log('📝 Credenciais encontradas:', {
+          autoLogin: autoLoginEnabled ? '✅ Ativado' : '❌ Desativado',
+          email: savedEmail ? '✅ Encontrado' : '❌ Não encontrado',
+          password: savedPassword ? '✅ Encontrado' : '❌ Não encontrado'
+        });
+
+        if (savedEmail && savedPassword && autoLoginEnabled === 'true') {
+          setValue('email', savedEmail);
+          setValue('password', savedPassword);
+          setRememberMe(true);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar credenciais salvas:', error);
+      }
+    };
+
+    checkSavedCredentials();
+  }, []);
+
+  // Detectar quando conta desativada é detectada
+  useEffect(() => {
+    if (deactivatedAccountDetected) {
+      console.log('🚨 Conta desativada detectada, redirecionando...');
+      navigation.navigate('DeactivatedAccount', { email: formState.email.value });
+      clearDeactivatedFlag(); // Limpar a flag após usar
+    }
+  }, [deactivatedAccountDetected, formState.email.value, navigation, clearDeactivatedFlag]);
 
   const handlePressRemenberPassword = () => {
     navigation.navigate('RemenberPassword');
   };
-
-
 
   const handlePressProfile = async () => {
     if (!validateAll()) {
@@ -44,56 +86,47 @@ export default function LoginScreen({ navigation }) {
     }
 
     try {
-      const loginResult = await executeLogin(async () => {
-        return await login({ 
-          email: formState.email.value, 
-          password: formState.password.value 
-        });
-      });
-      
-      // Verificar se é necessário alterar senha temporária
-      if (loginResult?.requirePasswordChange) {
-        Alert.alert(
-          'Senha Temporária Detectada 🔒',
-          loginResult.warning || 'Você deve alterar sua senha temporária antes de continuar.',
-          [
-            {
-              text: 'Alterar Senha',
-              onPress: () => navigation.navigate('ChangePassword')
-            }
-          ],
-          { cancelable: false }
-        );
+      const result = await execute(
+        () => login({ email: formState.email.value, password: formState.password.value }, rememberMe)
+      );
+
+      if (result.requirePasswordChange) {
+        Alert.alert('Bem-vindo!', 'Por favor, altere sua senha temporária.');
+        navigation.navigate('ChangePassword');
       } else {
+        Alert.alert('Sucesso!', 'Login realizado com sucesso!');
         navigation.navigate('ProfileHome');
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Erro no login:', error);
+      
+      // Tratamento de erro simples
       Alert.alert('Erro', 'Email ou senha incorretos. Tente novamente.');
     }
   };
 
+  // Detectar teclado
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
-      scrollViewRef.current?.scrollTo({ y: 200, animated: true });
     });
-
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardVisible(false);
     });
 
     return () => {
-      keyboardDidHideListener.remove();
       keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
     };
   }, []);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.scrollViewContent}
@@ -117,30 +150,31 @@ export default function LoginScreen({ navigation }) {
           <SubTitleComponent 
             subtitle={'Olá, artista!'} 
             color={'#A3A3A3'} 
-            FontFamily={'Roboto-Light'} 
-            MarginRight={24} 
-            MarginTop={14} 
+            fontFamily={'Roboto-Light'} 
+            marginRight={24} 
+            marginTop={14} 
           />
           <TitleComponent 
             title={'Pronto para dar o play?'} 
             color={''} 
             fontFamily={''} 
+            fontSize={24}
             truncate={false}
           />
           <SubTitleComponent 
             subtitle="Prepare-se para uma experiência única de aprendizado e música." 
             color="#A3A3A3" 
-            FontFamily="Roboto-Light" 
-            MarginRight={24} 
-            MarginTop={12} 
+            fontFamily="Roboto-Light" 
+            marginRight={24} 
+            marginTop={12} 
           />
 
           <SubTitleComponent 
             subtitle={'E-mail'} 
             color={'#A3A3A3'} 
-            MarginTop={24} 
-            FontFamily={''} 
-            MarginRight={0} 
+            marginTop={24} 
+            fontFamily={''} 
+            marginRight={0} 
           />
           <Input 
             onChangeText={(text) => setValue('email', text)}
@@ -158,9 +192,9 @@ export default function LoginScreen({ navigation }) {
           <SubTitleComponent 
             subtitle={'Senha'} 
             color={'#A3A3A3'} 
-            MarginTop={16} 
-            FontFamily={''} 
-            MarginRight={0} 
+            marginTop={16} 
+            fontFamily={''} 
+            marginRight={0} 
           />
           <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
             <Input 
@@ -181,7 +215,7 @@ export default function LoginScreen({ navigation }) {
               />
             </TouchableOpacity>
           </View>
-
+          
           <PrimaryButton 
             onPress={handlePressProfile} 
             title={'Acessar'} 
@@ -189,18 +223,30 @@ export default function LoginScreen({ navigation }) {
             loading={isLoading}
             disabled={isLoading}
           />
-
+          
+          {/* Opção Lembrar-me - Com o botão primeiro e depois o texto */}
+          <View style={styles.rememberMeContainer}>
+            <Switch
+              value={rememberMe}
+              onValueChange={setRememberMe}
+              trackColor={{ false: '#D9D9D9', true: '#76B0F1' }}
+              thumbColor={rememberMe ? '#0087D3' : '#f4f3f4'}
+            />
+            <Text style={styles.rememberMeText}>Lembrar-me</Text>
+          </View>
+          
           <View style={styles.containerLine}>
             <View style={styles.line}></View>
             <View style={styles.AjustedTop}>
               <SubTitleComponent 
                 subtitle={'ou'} 
                 color={'#A3A3A3'} 
-                MarginTop={0} 
-                FontFamily={'Roboto-Medium'} 
-                MarginRight={0}
+                marginTop={0} 
+                fontFamily={'Roboto-Medium'} 
+                marginRight={0}
               />
             </View>
+            <View style={styles.line}></View>
           </View>
           
           <TouchableOpacity 
@@ -211,14 +257,15 @@ export default function LoginScreen({ navigation }) {
             <SubTitleComponent 
               subtitle={'Esqueceu sua senha?'} 
               color={'#A3A3A3'} 
-              MarginTop={0} 
-              FontFamily={'Roboto-Medium'} 
-              MarginRight={0} 
+              marginTop={0} 
+              fontFamily={'Roboto-Medium'} 
+              marginRight={0} 
             />
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -240,53 +287,57 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: -45,
   },
-  AjustedTop: {
-    backgroundColor: 'white',
-    padding: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 0,
-    borderRadius: 2,
-    position: 'absolute',
-    alignSelf: 'center'
-  },
-  containerLine: {
-    height: 0,
-    marginBottom: 28,
-  },
-  line: {
-    width: '90%',
-    height: 2,
-    backgroundColor: '#EDEDED',
-    marginVertical: 20,
-    alignSelf: 'center'
-  },
-  RememberPassword: {
-    width: 'auto',
-    alignSelf: 'center',
-    paddingVertical: 8,
-  },
   containerImage: {
-    justifyContent: 'center',
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'center',
   },
   image: {
     resizeMode: 'contain',
   },
   passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     position: 'relative',
+    marginBottom: 16,
   },
   eyeIconContainer: {
     position: 'absolute',
-    right: 10,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    right: 15,
+    top: 15,
+    padding: 5,
   },
   eyeIcon: {
-    width: 24,
-    height: 24,
-  }
+    width: 20,
+    height: 20,
+  },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  rememberMeText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+  },
+  containerLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 20,
+  },
+  line: {
+    width: 60,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  AjustedTop: {
+    paddingHorizontal: 20,
+    backgroundColor: 'white',
+    paddingVertical: 4,
+  },
+  RememberPassword: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
 });

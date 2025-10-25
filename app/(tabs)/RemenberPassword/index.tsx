@@ -1,5 +1,6 @@
-import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, Linking } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import garota_sentada from '../../../assets/images/autenticacao.png';
 import TitleComponent from '../Components/Title/Title';
 import SubTitleComponent from '../Components/SubTitle/SubTitle';
@@ -7,6 +8,7 @@ import Input from '../Components/Form/Input/Input';
 import LabelComponent from '../Components/Form/Label/label';
 import ButtonComponent from '../Components/Form/Button/PrimaryButton/PrimaryButton';
 import apiService from '../../../services/api';
+import { validateEmail } from '../../../utils/validation';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -20,21 +22,15 @@ export default function ForgotPasswordScreen({ navigation }) {
 
 
 
-  // Validação de email
-  const validateEmail = (email: string) => {
-    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
-    return emailRegex.test(email);
-  };
+  // ✅ Removido - usando validateEmail do utils/validation.ts
 
   const validateForm = () => {
     let isValid = true;
     
-    // Validar email
-    if (!email.trim()) {
-      setEmailError('E-mail é obrigatório');
-      isValid = false;
-    } else if (!validateEmail(email)) {
-      setEmailError('E-mail inválido');
+    // ✅ Validar email com verificação de domínio
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      setEmailError(emailValidation.error || 'E-mail inválido');
       isValid = false;
     } else {
       setEmailError('');
@@ -56,22 +52,17 @@ export default function ForgotPasswordScreen({ navigation }) {
         body: JSON.stringify({ email }),
       });
 
-      Alert.alert(
-        'Email Enviado! 📧',
-        'Uma senha temporária foi enviada para seu e-mail. Verifique sua caixa de entrada (e spam) e use-a para fazer login.',
-        [
-          {
-            text: 'Ir para Login',
-            onPress: () => navigation.navigate('LoginScreen')
-          }
-        ]
-      );
-    } catch (error) {
+      Alert.alert('Sucesso!', 'Email de recuperação enviado!', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('LoginScreen')
+        }
+      ]);
+    } catch (error: any) {
       console.error('Erro ao solicitar recuperação de senha:', error);
-      Alert.alert(
-        'Erro',
-        error.message || 'Erro ao enviar email. Verifique o endereço e tente novamente.'
-      );
+      
+      // Tratamento de erro simples
+      Alert.alert('Erro', 'Não foi possível enviar o email de recuperação. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -94,11 +85,12 @@ export default function ForgotPasswordScreen({ navigation }) {
   }, []);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.scrollViewContent}
@@ -132,7 +124,8 @@ export default function ForgotPasswordScreen({ navigation }) {
           />
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

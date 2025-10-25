@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,6 +24,7 @@ interface QuizAnswer {
 
 const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
     const { user } = useAuth();
+    
     const {
         totalQuestions = 0,
         correctAnswers = 0,
@@ -37,49 +39,82 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         moduleId = '',
         isDailyChallenge = false,
         attempts = { current: 1, remaining: 2, maxAttempts: 3, cooldownUntil: null },
-        passed = false
+        passed = false,
+        requiredScore = 70, // ✅ Nota mínima necessária (vem do quiz)
+        quizLevel = 'aprendiz' // ✅ Nível do quiz
     } = route.params || {};
 
     // Estados para gerenciar tentativas
     const [currentAttemptStatus, setCurrentAttemptStatus] = useState<QuizAttemptStatus | null>(null);
     const [isLastAttempt, setIsLastAttempt] = useState(false);
 
+    // Estado para rastrear operações de envio
+    const [submissionStatus, setSubmissionStatus] = useState({
+        submitted: false,
+        registered: false,
+        error: false,
+        errorMessage: ''
+    });
+
     useEffect(() => {
-        // Submeter resultados para o backend se usuário autenticado
-        if (user && quizId && answers.length > 0) {
-            submitQuizResults();
-        }
-
-        // Registrar tentativa e verificar status
-        if (!isDailyChallenge && quizId && moduleId) {
-            registerQuizAttempt();
-        }
-
-        // Otimista: se passou, marcar como concluído no cache local para refletir na lista
-        if (!isDailyChallenge && moduleId && passed) {
+        const handleSubmissions = async () => {
             try {
-                quizCompletionService.markQuizAsCompleted(moduleId, {
-                    quizId: moduleId,
-                    score: correctAnswers,
-                    percentage,
-                    passed: true,
-                    completedAt: new Date().toISOString()
-                });
-            } catch {}
-        }
+                // Submeter resultados para o backend se usuário autenticado
+                if (user && quizId && answers.length > 0) {
+                    await submitQuizResults();
+                    setSubmissionStatus(prev => ({ ...prev, submitted: true }));
+                }
+
+                // Registrar tentativa e verificar status
+                if (!isDailyChallenge && quizId && moduleId) {
+                    await registerQuizAttempt();
+                    setSubmissionStatus(prev => ({ ...prev, registered: true }));
+                }
+
+                // Otimista: se passou, marcar como concluído no cache local para refletir na lista
+                if (!isDailyChallenge && moduleId && passed) {
+                    try {
+                        quizCompletionService.markQuizAsCompleted(moduleId, {
+                            quizId: moduleId,
+                            score: correctAnswers,
+                            percentage,
+                            passed: true,
+                            completedAt: new Date().toISOString()
+                        });
+                        console.log('✅ Quiz marcado como concluído no cache local:', moduleId);
+                    } catch (err) {
+                        console.log('⚠️ Erro ao marcar quiz como concluído no cache:', err instanceof Error ? err.message : String(err));
+                    }
+                }
+            } catch (err) {
+                console.error('❌ Erro ao processar submissões do quiz:', err);
+                setSubmissionStatus(prev => ({ 
+                    ...prev, 
+                    error: true, 
+                    errorMessage: err instanceof Error ? err.message : 'Erro desconhecido ao processar resultados'
+                }));
+            }
+        };
+
+        handleSubmissions();
     }, []);
 
     const submitQuizResults = async () => {
         try {
+            console.log('📝 Submetendo resultados do quiz ao backend:', { quizId, answersCount: answers.length });
             const formattedAnswers = answers.map((answer: QuizAnswer) => answer.selectedAnswer);
             
-            await quizService.submitQuiz({
+            const result = await quizService.submitQuiz({
                 quizId,
                 answers: formattedAnswers,
                 timeSpent
             });
+            
+            console.log('✅ Quiz submetido com sucesso:', result);
+            return result;
         } catch (error) {
-            // Falha silenciosa
+            console.error('❌ Erro ao submeter quiz:', error);
+            throw error; // Propagar erro para ser tratado no useEffect
         }
     };
 
@@ -89,71 +124,123 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
             const uniqueQuizId = moduleId;
             const uniqueModuleId = moduleId;
             
+            console.log('📊 Registrando tentativa do quiz:', { 
+                quizId: uniqueQuizId, 
+                moduleId: uniqueModuleId, 
+                passed 
+            });
+            
             const attemptStatus = await quizAttemptService.registerQuizAttempt(
                 uniqueQuizId, 
                 uniqueModuleId, 
                 passed
             );
             
+            console.log('✅ Status da tentativa registrado:', attemptStatus);
             setCurrentAttemptStatus(attemptStatus);
             
             // Se passou no quiz, não é "última tentativa" - é sucesso!
             const isLast = attemptStatus.attempts.current >= attemptStatus.attempts.maxAttempts && !passed;
             setIsLastAttempt(isLast);
             
+            return attemptStatus;
         } catch (error) {
+            console.error('❌ Erro ao registrar tentativa do quiz:', error);
             setIsLastAttempt(true);
+            throw error; // Propagar erro para ser tratado no useEffect
+        }
+    };
+
+    // ✅ FUNÇÃO ESPECÍFICA PARA DESAFIO DIÁRIO
+    const getPerformanceDataForDailyChallenge = () => {
+        // 🏆 EXCELENTE - 90%+
+        if (percentage >= 90) {
+            return {
+                title: 'Desempenho Excepcional!',
+                message: '🌟 Você dominou o desafio de hoje! Bônus máximo conquistado!',
+                color: '#FF8C00',
+                emoji: '⚡',
+                grade: 'S',
+                icon: 'lightning-bolt' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#FFF4E6'
+            };
+        }
+        // ✅ BOM - 70%+ (passou)
+        else if (percentage >= 70) {
+            return {
+                title: 'Desafio Completado!',
+                message: `✅ Você conquistou ${percentage}% no desafio de hoje! Volte amanhã para um novo desafio!`,
+                color: '#43A047',
+                emoji: '🎯',
+                grade: 'A',
+                icon: 'check-decagram' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#E8F5E8'
+            };
+        }
+        // ⚠️ ABAIXO DE 70% (não passou, mas desafio é único)
+        else {
+            return {
+                title: 'Desafio Tentado',
+                message: `💪 Você conseguiu ${percentage}%. Continue praticando nos módulos e volte amanhã para um novo desafio!`,
+                color: '#FF9800',
+                emoji: '📚',
+                grade: 'B',
+                icon: 'book-open-variant' as keyof typeof MaterialCommunityIcons.glyphMap,
+                bgColor: '#FFF3E0'
+            };
         }
     };
 
     const getPerformanceData = () => {
+        // ✅ SE FOR DESAFIO DIÁRIO, usar função específica
+        if (isDailyChallenge) {
+            return getPerformanceDataForDailyChallenge();
+        }
+
+        // ✅ EXCELENTE - 90%+ (Bônus de pontos)
         if (percentage >= 90) {
             return {
                 title: 'Excelente!',
-                message: 'Você demonstrou domínio excepcional do conteúdo!',
-                color: '#43A047', // Verde - sucesso
+                message: '🏆 Domínio excepcional! Você ganhou bônus de pontos!',
+                color: '#43A047',
                 emoji: '🎉',
                 grade: 'A+',
                 icon: 'trophy' as keyof typeof MaterialCommunityIcons.glyphMap,
                 bgColor: '#E8F5E8'
             };
-        } else if (percentage >= 80) {
+        } 
+        // ✅ PASSOU - Acima da meta
+        else if (passed && percentage >= requiredScore) {
             return {
-                title: 'Muito Bom!',
-                message: 'Você tem uma boa compreensão do material.',
-                color: '#42A5F5', // Azul - confiança
-                emoji: '👏',
+                title: 'Parabéns!',
+                message: `✅ Você atingiu a meta de ${requiredScore}%! Módulo completado!`,
+                color: '#42A5F5',
+                emoji: '🎯',
                 grade: 'A',
-                icon: 'star' as keyof typeof MaterialCommunityIcons.glyphMap,
+                icon: 'check-circle' as keyof typeof MaterialCommunityIcons.glyphMap,
                 bgColor: '#E3F2FD'
             };
-        } else if (percentage >= 70) {
+        } 
+        // ⚠️ QUASE LÁ - 5% abaixo da meta
+        else if (percentage >= requiredScore - 5 && percentage < requiredScore) {
             return {
-                title: 'Bom!',
-                message: 'Bom trabalho! Continue estudando para melhorar.',
-                color: '#0087D3', // Azul principal do app
-                emoji: '👍',
+                title: 'Quase Lá!',
+                message: `📚 Você precisa de ${requiredScore}%. Faltou pouco!`,
+                color: '#FF9800',
+                emoji: '💪',
                 grade: 'B',
-                icon: 'thumb-up' as keyof typeof MaterialCommunityIcons.glyphMap,
-                bgColor: '#E3F2FD'
-            };
-        } else if (percentage >= 50) {
-            return {
-                title: 'Satisfatório',
-                message: 'Continue se esforçando! Você está no caminho certo.',
-                color: '#FF9800', // Laranja - motivação
-                emoji: '📖',
-                grade: 'C',
                 icon: 'book-open' as keyof typeof MaterialCommunityIcons.glyphMap,
                 bgColor: '#FFF3E0'
             };
-        } else {
+        } 
+        // ⚠️ PRECISA ESTUDAR - Abaixo da meta
+        else {
             return {
-                title: 'Precisa Melhorar',
-                message: 'A prática leva à perfeição! Não desista.',
-                color: '#FF9800', // Laranja - encorajamento, não punição
-                emoji: '💪',
-                grade: 'D',
+                title: 'Continue Estudando',
+                message: `📖 Meta: ${requiredScore}%. A prática leva à perfeição!`,
+                color: '#FF9800',
+                emoji: '📚',
+                grade: 'C',
                 icon: 'school' as keyof typeof MaterialCommunityIcons.glyphMap,
                 bgColor: '#FFF3E0'
             };
@@ -171,6 +258,33 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
     // Funções de navegação
     const handleBackToHome = () => {
         console.log('🏠 Voltando ao menu principal');
+        
+        // Verificar se houve erro na sincronização
+        if (submissionStatus.error) {
+            Alert.alert(
+                'Atenção',
+                'Houve problemas na sincronização dos seus resultados com o servidor. Seus resultados serão enviados automaticamente quando a conexão for restabelecida.',
+                [{ text: 'Entendi' }]
+            );
+        }
+        
+        // ✅ Se passou no quiz, sinalizar para atualizar status dos módulos
+        // Isso permite que o próximo módulo seja desbloqueado automaticamente
+        if (passed && moduleId) {
+            console.log('✅ Quiz passou! Sinalizando atualização de status...');
+            // Tentar navegar de volta para a lista de módulos com sinal de refresh
+            try {
+                navigation.navigate('ContentListCategory', {
+                    refreshStatus: true,
+                    completedModuleId: moduleId
+                });
+                return;
+            } catch (error) {
+                console.log('⚠️ Não foi possível voltar para ContentListCategory, voltando para Home');
+            }
+        }
+        
+        // Fallback: voltar para home
         navigation.reset({
             index: 0,
             routes: [{ name: 'ProfileHome' }],
@@ -245,7 +359,8 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
     };
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+            <View style={styles.container}>
             <ScrollView 
                 style={styles.scrollView} 
                 showsVerticalScrollIndicator={false}
@@ -403,57 +518,161 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
 
                 {/* Seção de Ações */}
                 <View style={styles.actionsSection}>
-                    <View style={styles.actionButtons}>
-                        {/* Botão Principal - Finalizar */}
-                        <TouchableOpacity 
-                            style={[styles.button, styles.primaryButton]} 
-                            onPress={handleFinalize}
-                            activeOpacity={0.8}
-                        >
-                            <MaterialCommunityIcons name="check" size={18} color="#FFFFFF" />
-                            <Text style={styles.primaryButtonText}>Finalizar</Text>
-                        </TouchableOpacity>
-                        
-                        {/* Botão Secundário - Tentar Novamente (apenas se disponível) */}
-                        {!isLastAttempt && !passed && (
-                            <TouchableOpacity 
-                                style={[styles.button, styles.secondaryButton]} 
-                                onPress={handleRetryQuiz}
-                                activeOpacity={0.8}
-                            >
-                                <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
-                                <Text style={styles.secondaryButtonText}>Tentar Novamente</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        {/* Mensagem quando não pode tentar - APENAS se não passou */}
-                        {isLastAttempt && !passed && (
-                            <View style={styles.statusMessage}>
-                                <MaterialCommunityIcons name="alert-circle" size={18} color="#FF9800" />
-                                <View style={styles.statusMessageContent}>
-                                    <Text style={styles.statusMessageText}>
-                                        Você esgotou suas tentativas para este quiz
+                    {/* 🌟 CASO ESPECIAL: DESAFIO DIÁRIO */}
+                    {isDailyChallenge ? (
+                        <View style={styles.actionButtons}>
+                            {/* Badge do Desafio Diário */}
+                            <View style={[styles.dailyChallengeBadge, { borderColor: performance.color }]}>
+                                <MaterialCommunityIcons name="lightning-bolt" size={24} color="#FF8C00" />
+                                <View style={styles.dailyChallengeContent}>
+                                    <Text style={styles.dailyChallengeTitle}>
+                                        {percentage >= 70 ? '✅ Desafio Concluído!' : '💪 Desafio Tentado'}
                                     </Text>
-                                    <Text style={styles.statusMessageSubtext}>
-                                        O quiz ficará bloqueado por 30 minutos. Aproveite para estudar!
+                                    <Text style={styles.dailyChallengeSubtext}>
+                                        {percentage >= 70 
+                                            ? `Você conquistou ${totalScore} pontos bônus!`
+                                            : 'Volte amanhã para um novo desafio!'}
                                     </Text>
                                 </View>
                             </View>
-                        )}
 
-                        {/* Botão Terciário - Explorar Módulos */}
-                        <TouchableOpacity 
-                            style={[styles.button, styles.tertiaryButton]} 
-                            onPress={handleViewModules}
-                            activeOpacity={0.8}
-                        >
-                            <MaterialCommunityIcons name="book-open" size={18} color="#0087D3" />
-                            <Text style={styles.tertiaryButtonText}>Explorar Módulos</Text>
-                        </TouchableOpacity>
-                    </View>
+                            {/* Informação sobre Pontos Ganhos */}
+                            {percentage >= 70 && (
+                                <View style={styles.dailyPointsInfo}>
+                                    <MaterialCommunityIcons name="star-circle" size={20} color="#FF8C00" />
+                                    <Text style={styles.dailyPointsText}>
+                                        +{totalScore} pontos • Próximo desafio amanhã
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Botão Principal - Voltar ao Menu */}
+                            <TouchableOpacity 
+                                style={[styles.button, styles.dailyChallengeButton]} 
+                                onPress={handleBackToHome}
+                                activeOpacity={0.8}
+                            >
+                                <MaterialCommunityIcons name="home" size={20} color="#FFFFFF" />
+                                <Text style={styles.primaryButtonText}>Voltar ao Menu</Text>
+                            </TouchableOpacity>
+
+                            {/* Botão Secundário - Explorar Módulos */}
+                            <TouchableOpacity 
+                                style={[styles.button, styles.tertiaryButton]} 
+                                onPress={handleViewModules}
+                                activeOpacity={0.8}
+                            >
+                                <MaterialCommunityIcons name="book-open-variant" size={18} color="#0087D3" />
+                                <Text style={styles.tertiaryButtonText}>Praticar nos Módulos</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <>
+                            {/* ✅ CASO 1: PASSOU NO QUIZ */}
+                            {passed && (
+                                <View style={styles.actionButtons}>
+                                    {/* Badge de Sucesso */}
+                                    <View style={styles.successBadge}>
+                                        <MaterialCommunityIcons name="check-decagram" size={24} color="#43A047" />
+                                        <Text style={styles.successBadgeText}>✅ Módulo Completado!</Text>
+                                    </View>
+
+                                    {/* Botão Principal - Continuar */}
+                                    <TouchableOpacity 
+                                        style={[styles.button, styles.successButton]} 
+                                        onPress={handleFinalize}
+                                        activeOpacity={0.8}
+                                    >
+                                        <MaterialCommunityIcons name="arrow-right-circle" size={20} color="#FFFFFF" />
+                                        <Text style={styles.primaryButtonText}>Continuar Aprendendo</Text>
+                                    </TouchableOpacity>
+
+                                    {/* Botão Secundário - Explorar */}
+                                    <TouchableOpacity 
+                                        style={[styles.button, styles.tertiaryButton]} 
+                                        onPress={handleViewModules}
+                                        activeOpacity={0.8}
+                                    >
+                                        <MaterialCommunityIcons name="book-open-variant" size={18} color="#0087D3" />
+                                        <Text style={styles.tertiaryButtonText}>Explorar Mais Módulos</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {/* ❌ CASO 2: NÃO PASSOU MAS TEM TENTATIVAS */}
+                            {!passed && !isLastAttempt && (
+                        <View style={styles.actionButtons}>
+                            {/* Mensagem Motivadora */}
+                            <View style={styles.motivationMessage}>
+                                <MaterialCommunityIcons name="target" size={22} color="#FF9800" />
+                                <View style={styles.motivationContent}>
+                                    <Text style={styles.motivationTitle}>
+                                        Você precisa de {requiredScore}% para passar
+                                    </Text>
+                                    <Text style={styles.motivationSubtext}>
+                                        Tentativa {attempts?.current || 1} de {attempts?.maxAttempts || 3} • Você consegue!
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* Botão Principal - Tentar Novamente (DESTAQUE) */}
+                            <TouchableOpacity 
+                                style={[styles.button, styles.retryButton]} 
+                                onPress={handleRetryQuiz}
+                                activeOpacity={0.8}
+                            >
+                                <MaterialCommunityIcons name="refresh-circle" size={20} color="#FFFFFF" />
+                                <Text style={styles.primaryButtonText}>🔄 Tentar Novamente</Text>
+                            </TouchableOpacity>
+
+                            {/* Botão Secundário - Estudar Mais */}
+                            <TouchableOpacity 
+                                style={[styles.button, styles.tertiaryButton]} 
+                                onPress={handleViewModules}
+                                activeOpacity={0.8}
+                            >
+                                <MaterialCommunityIcons name="book-open" size={18} color="#0087D3" />
+                                <Text style={styles.tertiaryButtonText}>📚 Estudar Mais</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                            {/* ⚠️ CASO 3: ESGOTOU TENTATIVAS */}
+                            {!passed && isLastAttempt && (
+                                <View style={styles.actionButtons}>
+                                    {/* Mensagem de Cooldown */}
+                                    <View style={styles.cooldownMessage}>
+                                        <MaterialCommunityIcons name="clock-alert" size={24} color="#E65100" />
+                                        <View style={styles.cooldownContent}>
+                                            <Text style={styles.cooldownTitle}>
+                                                ⏱️ Tentativas Esgotadas
+                                            </Text>
+                                            <Text style={styles.cooldownSubtext}>
+                                                O quiz ficará bloqueado por 3 horas.
+                                            </Text>
+                                            <Text style={styles.cooldownSubtext}>
+                                                💡 Aproveite este tempo para revisar o conteúdo!
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Botão Principal - Voltar */}
+                                    <TouchableOpacity 
+                                        style={[styles.button, styles.primaryButton]} 
+                                        onPress={handleViewModules}
+                                        activeOpacity={0.8}
+                                    >
+                                        <MaterialCommunityIcons name="arrow-left-circle" size={20} color="#FFFFFF" />
+                                        <Text style={styles.primaryButtonText}>Voltar aos Módulos</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </>
+                    )}
                 </View>
             </ScrollView>
-        </View>
+            </View>
+        </SafeAreaView>
     );
 };
 
@@ -693,6 +912,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
+    successButton: {
+        backgroundColor: '#43A047',
+    },
+    retryButton: {
+        backgroundColor: '#FF9800',
+    },
     secondaryButton: {
         backgroundColor: '#43A047',
     },
@@ -710,6 +935,77 @@ const styles = StyleSheet.create({
         color: '#0087D3',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    // ✅ Badge de Sucesso
+    successBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#E8F5E8',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 16,
+        gap: 12,
+        borderWidth: 2,
+        borderColor: '#43A047',
+    },
+    successBadgeText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#43A047',
+    },
+    // 💪 Mensagem Motivadora
+    motivationMessage: {
+        flexDirection: 'row',
+        backgroundColor: '#FFF3E0',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 16,
+        alignItems: 'center',
+        gap: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#FF9800',
+    },
+    motivationContent: {
+        flex: 1,
+    },
+    motivationTitle: {
+        fontSize: 15,
+        color: '#E65100',
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    motivationSubtext: {
+        fontSize: 13,
+        color: '#F57C00',
+        fontWeight: '500',
+    },
+    // ⏱️ Mensagem de Cooldown
+    cooldownMessage: {
+        flexDirection: 'row',
+        backgroundColor: '#FFF3E0',
+        padding: 20,
+        borderRadius: 12,
+        marginBottom: 16,
+        alignItems: 'flex-start',
+        gap: 12,
+        borderWidth: 2,
+        borderColor: '#FF9800',
+    },
+    cooldownContent: {
+        flex: 1,
+    },
+    cooldownTitle: {
+        fontSize: 16,
+        color: '#E65100',
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    cooldownSubtext: {
+        fontSize: 14,
+        color: '#F57C00',
+        marginTop: 4,
+        lineHeight: 20,
     },
     statusMessage: {
         flexDirection: 'row',
@@ -734,6 +1030,53 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#E65100',
         marginTop: 2,
+    },
+    // 🌟 Estilos específicos para Desafio Diário
+    dailyChallengeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF4E6',
+        padding: 18,
+        borderRadius: 12,
+        marginBottom: 16,
+        gap: 14,
+        borderWidth: 3,
+        borderLeftWidth: 6,
+    },
+    dailyChallengeContent: {
+        flex: 1,
+    },
+    dailyChallengeTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#E65100',
+        marginBottom: 4,
+    },
+    dailyChallengeSubtext: {
+        fontSize: 14,
+        color: '#F57C00',
+        fontWeight: '500',
+    },
+    dailyPointsInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFF4E6',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        marginBottom: 16,
+        gap: 8,
+        borderWidth: 1,
+        borderColor: '#FFE0B2',
+    },
+    dailyPointsText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#E65100',
+    },
+    dailyChallengeButton: {
+        backgroundColor: '#FF8C00',
     },
 });
 

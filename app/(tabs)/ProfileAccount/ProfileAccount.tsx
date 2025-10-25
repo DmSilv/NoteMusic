@@ -1,5 +1,6 @@
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import eyeIcon from '../../../assets/images/eye.png';
 import eyeOffIcon from '../../../assets/images/eye-off.png';
 import TitleComponent from '../Components/Title/Title';
@@ -11,6 +12,7 @@ import MenuBottom from '../Components/MenuBottom';
 import EditAccount from '../../../assets/images/Edit-Account.png';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../../contexts/AuthContext';
+import { validateEmail, validateName } from '../../../utils/validation';
 interface ModuleCategoryProps {
     navigation: StackNavigationProp<any>;
 }
@@ -70,13 +72,11 @@ interface ModuleCategoryProps {
         let isValid = true;
         const newErrors = { ...errors };
         
-        // Validar nome
+        // ✅ Validar nome com filtro de palavras inapropriadas
         if (formData.name.trim()) {
-            if (formData.name.trim().length < 2) {
-                newErrors.name = 'Nome deve ter pelo menos 2 caracteres';
-                isValid = false;
-            } else if (formData.name.trim().length > 15) {
-                newErrors.name = 'Nome deve ter no máximo 15 caracteres (apenas primeiro nome)';
+            const nameValidation = validateName(formData.name);
+            if (!nameValidation.isValid) {
+                newErrors.name = nameValidation.error || 'Nome inválido';
                 isValid = false;
             } else {
                 newErrors.name = '';
@@ -85,10 +85,15 @@ interface ModuleCategoryProps {
             newErrors.name = '';
         }
         
-        // Validar email
-        if (formData.email.trim() && !validateEmail(formData.email)) {
-            newErrors.email = 'E-mail inválido';
-            isValid = false;
+        // ✅ Validar email com verificação de domínio
+        if (formData.email.trim()) {
+            const emailValidation = validateEmail(formData.email);
+            if (!emailValidation.isValid) {
+                newErrors.email = emailValidation.error || 'E-mail inválido';
+                isValid = false;
+            } else {
+                newErrors.email = '';
+            }
         } else {
             newErrors.email = '';
         }
@@ -201,10 +206,7 @@ interface ModuleCategoryProps {
         );
     };
 
-    const validateEmail = (email: string) => {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
-    };
+    // ✅ Removido - usando validateEmail do utils/validation.ts (já importado)
 
     const validateField = (field: string, value: string) => {
         let error = '';
@@ -212,16 +214,19 @@ interface ModuleCategoryProps {
         switch (field) {
             case 'name':
                 if (value.trim()) {
-                    if (value.trim().length < 2) {
-                        error = 'Nome deve ter pelo menos 2 caracteres';
-                    } else if (value.trim().length > 15) {
-                        error = 'Nome deve ter no máximo 15 caracteres (apenas primeiro nome)';
+                    // ✅ Usar validação completa incluindo filtro de palavras inapropriadas
+                    const nameValidation = validateName(value);
+                    if (!nameValidation.isValid) {
+                        error = nameValidation.error || 'Nome inválido';
                     }
                 }
                 break;
             case 'email':
-                if (value.trim() && !validateEmail(value)) {
-                    error = 'E-mail inválido';
+                if (value.trim()) {
+                    const emailValidation = validateEmail(value);
+                    if (!emailValidation.isValid) {
+                        error = emailValidation.error || 'E-mail inválido';
+                    }
                 }
                 break;
             case 'currentPassword':
@@ -269,11 +274,12 @@ interface ModuleCategoryProps {
     };
 
     return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-        >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+            <KeyboardAvoidingView
+                style={styles.container}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+            >
             <ScrollView
                 ref={scrollViewRef}
                 contentContainerStyle={styles.scrollViewContent}
@@ -353,6 +359,28 @@ interface ModuleCategoryProps {
                     />
                     
                     <View style={styles.logoutContainer}>
+                        <TouchableOpacity 
+                            style={styles.deleteAccountButton}
+                            onPress={() => {
+                                Alert.alert(
+                                    'Excluir Conta',
+                                    'Tem certeza que deseja excluir sua conta? Esta ação é irreversível.',
+                                    [
+                                        { text: 'Cancelar', style: 'cancel' },
+                                        { 
+                                            text: 'Continuar', 
+                                            style: 'destructive',
+                                            onPress: () => navigation.navigate('AccountDeletion')
+                                        }
+                                    ]
+                                );
+                            }}
+                        >
+                            <Text style={styles.deleteAccountButtonText}>Excluir Conta</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.logoutContainer}>
                         <SecondaryButton onPress={handleLogout} styleWidth={{ width: windowWidth * 0.85 }} title={'Sair da Conta'} />
                     </View>
                 </View>
@@ -366,7 +394,8 @@ interface ModuleCategoryProps {
           />
           
             )}
-        </KeyboardAvoidingView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 }
 
@@ -428,6 +457,27 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontFamily: 'Roboto-Regular',
         textAlign: 'center',
+    },
+    deleteAccountButton: {
+        backgroundColor: '#DC3545',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#C82333',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    deleteAccountButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+        letterSpacing: 0.5,
     },
 });
 

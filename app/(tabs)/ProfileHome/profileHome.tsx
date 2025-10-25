@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp } from '@react-navigation/native';
 import MenuBottom from '../Components/MenuBottom';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../../services/api';
+import moduleService from '../../../services/moduleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserStats } from '../../types/UserStats';
+import { UserStats } from '../../../types/UserStats';
 
 // ✅ INTERFACE PARA CONTROLE DE DESAFIO DIÁRIO
 interface DailyChallengeStatus {
@@ -37,6 +39,89 @@ function getLevelBadge(level: string): { color: string; icon: keyof typeof Mater
     'Maestro': { color: '#FF8C00', icon: 'crown' },
   };
   return levels[level] || levels['Aprendiz'];
+}
+
+// ✅ FUNÇÃO PARA CALCULAR STATUS DA SEQUÊNCIA (STREAK)
+function getStreakStatus(userStats: UserStats | null) {
+  const currentStreak = userStats?.currentStreak || userStats?.streak || 0;
+  const lastStudyDate = userStats?.recentActivity?.lastStudyDate;
+  
+  // Verificar se estudou hoje
+  const today = new Date().toDateString();
+  const lastStudy = lastStudyDate ? new Date(lastStudyDate).toDateString() : null;
+  const studiedToday = lastStudy === today;
+  
+  let description = 'Dias consecutivos';
+  let icon: keyof typeof MaterialCommunityIcons.glyphMap = 'fire';
+  
+  if (currentStreak === 0) {
+    description = 'Comece hoje!';
+  } else if (studiedToday) {
+    description = '✅ Ativo hoje';
+  } else {
+    description = 'Dias seguidos';
+  }
+  
+  return {
+    value: `${currentStreak} ${currentStreak === 1 ? 'dia' : 'dias'}`,
+    icon,
+    description,
+    color: '#0087D3'
+  };
+}
+
+// ✅ FUNÇÃO PARA CALCULAR STATUS DOS PONTOS TOTAIS
+function getPointsStatus(userStats: UserStats | null) {
+  const totalPoints = userStats?.totalPoints || 0;
+  const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'star-circle';
+  
+  let description = 'Pontos acumulados';
+  
+  if (totalPoints >= 1000) {
+    description = 'Excelente!';
+  } else if (totalPoints >= 500) {
+    description = 'Muito bem!';
+  } else if (totalPoints >= 100) {
+    description = 'Progredindo';
+  } else if (totalPoints > 0) {
+    description = 'Continue assim';
+  } else {
+    description = 'Ganhe pontos';
+  }
+  
+  return {
+    value: totalPoints.toString(),
+    icon,
+    description,
+    color: '#0087D3'
+  };
+}
+
+// ✅ FUNÇÃO PARA CALCULAR TAXA DE APROVAÇÃO
+function getPassRateStatus(userStats: UserStats | null) {
+  const passRate = userStats?.quizPassRate || 0;
+  const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'chart-line';
+  
+  let description = 'Taxa de aprovação';
+  
+  if (passRate >= 90) {
+    description = 'Excelente!';
+  } else if (passRate >= 70) {
+    description = 'Muito bom';
+  } else if (passRate >= 50) {
+    description = 'Continue!';
+  } else if (passRate > 0) {
+    description = 'Pratique mais';
+  } else {
+    description = 'Faça quizzes';
+  }
+  
+  return {
+    value: `${Math.round(passRate)}%`,
+    icon,
+    description,
+    color: '#0087D3'
+  };
 }
 
 interface ProfileHomeProps {
@@ -81,17 +166,18 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     return unsubscribe;
   }, [navigation]); // Removido loadUserData e loadDailyChallengeStatus das dependências
 
-  // ✅ TIMER AUTOMÁTICO: Verificar a cada minuto se o desafio deve ser desbloqueado
+  // ✅ TIMER AUTOMÁTICO: Verificar a cada minuto se é um novo dia (meia-noite passou)
   useEffect(() => {
     const interval = setInterval(() => {
-      // Verificar se há um desafio completado e se já passou 24h
       if (dailyChallengeStatus.completed && dailyChallengeStatus.completedAt) {
         const now = new Date();
+        const todayStart = getTodayStart();
         const completedAt = new Date(dailyChallengeStatus.completedAt);
-        const nextAvailable = new Date(completedAt.getTime() + (24 * 60 * 60 * 1000));
+        const completedDate = new Date(completedAt.getFullYear(), completedAt.getMonth(), completedAt.getDate());
         
-        if (now >= nextAvailable) {
-          console.log('🕐 24h passaram! Desbloqueando desafio diário...');
+        // Se mudou de dia, desbloquear
+        if (completedDate.getTime() !== todayStart.getTime()) {
+          console.log('🌅 Novo dia! Desbloqueando desafio diário...');
           loadDailyChallengeStatus(); // Recarregar status para desbloquear
         }
       }
@@ -100,23 +186,48 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     return () => clearInterval(interval);
   }, [dailyChallengeStatus.completed, dailyChallengeStatus.completedAt]);
 
-  // ✅ FUNÇÃO PARA CARREGAR STATUS DO DESAFIO DIÁRIO
+  // ✅ FUNÇÃO PARA OBTER INÍCIO DO DIA ATUAL (meia-noite)
+  const getTodayStart = (): Date => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  };
+
+  // ✅ FUNÇÃO PARA OBTER INÍCIO DO PRÓXIMO DIA (próxima meia-noite)
+  const getTomorrowStart = (): Date => {
+    const today = getTodayStart();
+    return new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  };
+
+  // ✅ FUNÇÃO PARA CARREGAR STATUS DO DESAFIO DIÁRIO (baseado no DIA, não em 24h)
   const loadDailyChallengeStatus = async () => {
     try {
       const stored = await AsyncStorage.getItem('@NoteMusic:dailyChallenge');
+      const now = new Date();
+      const todayStart = getTodayStart();
+      
       if (stored) {
         const status = JSON.parse(stored);
-        const now = new Date();
         const completedAt = status.completedAt ? new Date(status.completedAt) : null;
         
         if (completedAt) {
-          const nextAvailable = new Date(completedAt.getTime() + (24 * 60 * 60 * 1000)); // +24h
-          const canPlay = now >= nextAvailable;
-          const timeRemaining = canPlay ? '' : formatTimeRemaining(nextAvailable, now);
+          // ✅ VERIFICAR SE FOI COMPLETADO HOJE (comparando apenas a DATA, não hora)
+          const completedDate = new Date(completedAt.getFullYear(), completedAt.getMonth(), completedAt.getDate());
+          const isCompletedToday = completedDate.getTime() === todayStart.getTime();
           
-          // ✅ CORREÇÃO: Se já passou 24h, resetar o status para permitir novo desafio
-          if (canPlay) {
-            // Resetar o status para permitir novo desafio
+          if (isCompletedToday) {
+            // Completado hoje - bloquear até amanhã
+            const nextAvailable = getTomorrowStart();
+            const timeRemaining = formatTimeRemaining(nextAvailable, now);
+            
+            setDailyChallengeStatus({
+              completed: true,
+              completedAt: status.completedAt,
+              nextAvailableAt: nextAvailable.toISOString(),
+              canPlay: false,
+              timeRemaining
+            });
+          } else {
+            // Completado em outro dia - resetar para permitir novo desafio
             const resetStatus = {
               completed: false,
               completedAt: null,
@@ -125,22 +236,11 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
               timeRemaining: ''
             };
             
-            // Salvar o status resetado
             await AsyncStorage.setItem('@NoteMusic:dailyChallenge', JSON.stringify(resetStatus));
-            
             setDailyChallengeStatus(resetStatus);
-          } else {
-            // Ainda dentro do período de 24h, manter bloqueado
-            setDailyChallengeStatus({
-              completed: true,
-              completedAt: status.completedAt,
-              nextAvailableAt: nextAvailable.toISOString(),
-              canPlay: false,
-              timeRemaining
-            });
           }
         } else {
-          // Primeira vez ou sem dados, permitir jogar
+          // Sem data de conclusão - permitir jogar
           setDailyChallengeStatus({
             completed: false,
             completedAt: null,
@@ -150,7 +250,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
           });
         }
       } else {
-        // Primeira vez, permitir jogar
+        // Primeira vez - permitir jogar
         setDailyChallengeStatus({
           completed: false,
           completedAt: null,
@@ -184,24 +284,25 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     return `${minutes}m`;
   };
 
-  // ✅ FUNÇÃO PARA MARCAR DESAFIO COMO COMPLETO
+  // ✅ FUNÇÃO PARA MARCAR DESAFIO COMO COMPLETO (bloqueado até próxima meia-noite)
   const markDailyChallengeCompleted = async () => {
     try {
       const now = new Date();
-      const nextAvailable = new Date(now.getTime() + (24 * 60 * 60 * 1000)); // +24h
+      const nextAvailable = getTomorrowStart(); // Próxima meia-noite
+      const timeRemaining = formatTimeRemaining(nextAvailable, now);
       
       const status = {
         completed: true,
         completedAt: now.toISOString(),
         nextAvailableAt: nextAvailable.toISOString(),
         canPlay: false,
-        timeRemaining: '24h'
+        timeRemaining
       };
       
       await AsyncStorage.setItem('@NoteMusic:dailyChallenge', JSON.stringify(status));
       setDailyChallengeStatus(status);
       
-      console.log('✅ Desafio diário marcado como completo. Próximo disponível em:', nextAvailable.toISOString());
+      console.log('✅ Desafio diário completo! Próximo disponível à meia-noite:', nextAvailable.toISOString());
     } catch (error) {
       console.error('Erro ao marcar desafio como completo:', error);
     }
@@ -321,8 +422,8 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
   const loadModuleProgress = async () => {
     try {
-      if (user) {
-        const progress = await apiService.getModuleProgress();
+      if (user && user.id) {
+        const progress = await moduleService.getModuleProgress(user.id);
         console.log('📚 Progresso de módulos carregado:', progress);
         setModuleProgress(progress);
       }
@@ -378,34 +479,37 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
   const levelBadge = getLevelBadge(safeUserStats.level);
   const greeting = getGreeting(safeUserStats);
 
+  // ✅ CÁLCULOS INTELIGENTES PARA OS CARDS
+  const streakStatus = getStreakStatus(userStats);
+  const pointsStatus = getPointsStatus(userStats);
+  const passRateStatus = getPassRateStatus(userStats);
+
   const stats = [
     {
       label: 'Sequência Ativa',
-      value: `${safeUserStats.streak} dias`,
-      icon: 'fire' as keyof typeof MaterialCommunityIcons.glyphMap,
-      description: 'Dias seguidos de estudo',
-      color: '#FF9800',
+      value: streakStatus.value,
+      icon: streakStatus.icon,
+      description: streakStatus.description,
+      color: streakStatus.color,
     },
     {
-      label: 'Conclusão de Módulos Completados',
-      value: moduleProgress ? moduleProgress.progress : '0/0',
-      icon: 'check-circle' as keyof typeof MaterialCommunityIcons.glyphMap,
-      description: moduleProgress && moduleProgress.message ? 
-        'Nível Máximo Atingido!' : 
-        `Nível ${moduleProgress ? moduleProgress.level : 'Aprendiz'}`,
-      color: moduleProgress && moduleProgress.message ? '#FF6B35' : '#1976D2',
+      label: 'Pontos Totais',
+      value: pointsStatus.value,
+      icon: pointsStatus.icon,
+      description: pointsStatus.description,
+      color: pointsStatus.color,
     },
     {
-      label: 'Semana Atual',
-      value: `${safeUserStats.weeklyProgress}/${safeUserStats.weeklyGoal}`,
-      icon: 'calendar-week' as keyof typeof MaterialCommunityIcons.glyphMap,
-      description: 'Meta semanal atingida',
-      color: '#43A047',
+      label: 'Taxa de Sucesso',
+      value: passRateStatus.value,
+      icon: passRateStatus.icon,
+      description: passRateStatus.description,
+      color: passRateStatus.color,
     },
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Topo: Badge de nível, Saudação, Nome, Progresso */}
         <View style={styles.userHeader}>
@@ -427,7 +531,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         {/* Cards de evolução */}
         <View style={styles.statsRow}>
           {stats.map((stat, idx) => (
-            <View key={idx} style={[styles.statCard, { shadowColor: stat.color }]}> 
+            <View key={idx} style={[styles.statCard, { borderTopColor: stat.color }]}> 
               <MaterialCommunityIcons name={stat.icon} size={32} color={stat.color} style={{ marginBottom: 8 }} />
               <Text style={styles.statValue}>{stat.value}</Text>
               <Text style={styles.statLabel}>{stat.label}</Text>
@@ -460,7 +564,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
           
           <Text style={styles.dailyChallengeDesc}>
             {!dailyChallengeStatus.canPlay 
-              ? 'Você já completou o desafio de hoje! Volte em 24 horas para um novo desafio.'
+              ? 'Você já completou o desafio de hoje! Volte amanhã para um novo desafio.'
               : 'Teste seus conhecimentos com questões especiais e ganhe pontos bônus para acelerar seu progresso!'
             }
           </Text>
@@ -522,14 +626,14 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         goHome={() => {}}
         goProfile={() => navigation && navigation.navigate ? navigation.navigate('ProfileAccount') : null}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingTop: 16,
     paddingBottom: 32,
     backgroundColor: '#F8F9FA',
     flexGrow: 1,
@@ -583,6 +687,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFF',
     borderRadius: 16,
+    borderTopWidth: 3,
     paddingVertical: 20,
     paddingHorizontal: 12,
     alignItems: 'center',
@@ -590,28 +695,29 @@ const styles = StyleSheet.create({
     elevation: 2,
     shadowOpacity: 0.07,
     shadowRadius: 6,
-    minHeight: 100,
+    minHeight: 120,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 20,
     color: '#0087D3',
     fontWeight: 'bold',
     marginBottom: 4,
     textAlign: 'center',
   },
   statLabel: {
-    fontSize: 12,
-    color: '#545454',
+    fontSize: 11,
+    color: '#666',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 6,
     fontWeight: '600',
   },
   statDesc: {
-    fontSize: 10,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#888',
     textAlign: 'center',
     marginBottom: 0,
-    lineHeight: 12,
+    lineHeight: 14,
+    fontWeight: '500',
   },
 
   categoryContext: {
@@ -692,7 +798,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dailyChallengeButtonText: {
-    color: '#333',
+    color: '#FFF', // ✅ Texto branco para contraste perfeito com fundo laranja
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -701,7 +807,7 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   dailyChallengeButtonTextDisabled: {
-    color: '#999',
+    color: '#999', // Mantém cinza quando desabilitado
   },
   dailyChallengeTimer: {
     flexDirection: 'row',

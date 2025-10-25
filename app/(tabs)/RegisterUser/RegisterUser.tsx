@@ -1,5 +1,7 @@
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShowAccountSelectionScreenNavigationProp } from './types';
 import musico from '../../../assets/images/musico.png';
 import eyeIcon from '../../../assets/images/eye.png'; 
@@ -9,7 +11,7 @@ import SubTitleComponent from '../Components/SubTitle/SubTitle';
 import PrimaryButton from '../Components/Form/Button/PrimaryButton/PrimaryButton';
 import Input from '../Components/Form/Input/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { validateName, validateEmail, validatePassword, validatePasswordConfirmation } from '../../utils/validation';
+import { validateName, validateEmail, validatePassword, validatePasswordConfirmation } from '../../../utils/validation';
 
 export default function RegisterUser({ navigation }) {
   const scrollViewRef = useRef<ScrollView>(null); 
@@ -17,102 +19,78 @@ export default function RegisterUser({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const { register } = useAuth();
-
-  // Estados para formulário
+  const { register, isLoading } = useAuth();
+  
+  // Estados do formulário
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  
+  // Estados de erro
+  const [errors, setErrors] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
 
-  // Estados para validação
-  const [nameError, setNameError] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [confirmPasswordError, setConfirmPasswordError] = useState('');
-
-  // Função para validar nome
-  const validateName = (name: string) => {
-    if (!name.trim()) {
-      setNameError('Nome é obrigatório');
-      return false;
-    }
-    if (name.length < 2) {
-      setNameError('Nome deve ter no mínimo 2 caracteres');
-      return false;
-    }
-    if (name.length > 15) {
-      setNameError('Nome deve ter no máximo 15 caracteres (apenas primeiro nome)');
-      return false;
-    }
-    setNameError('');
-    return true;
-  };
-
+  // Detectar teclado
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
-      scrollViewRef.current?.scrollTo({ y: 300, animated: true });
     });
-
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardVisible(false);
     });
 
     return () => {
-      keyboardDidHideListener.remove();
       keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
     };
   }, []);
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+  const validateField = (field: string, value: string) => {
+    let error = '';
+    
+    switch (field) {
+      case 'name':
+        const nameValidation = validateName(value);
+        if (!nameValidation.isValid) {
+          error = nameValidation.error || '';
+        }
+        break;
+      case 'email':
+        const emailValidation = validateEmail(value);
+        if (!emailValidation.isValid) {
+          error = emailValidation.error || '';
+        }
+        break;
+      case 'password':
+        const passwordValidation = validatePassword(value);
+        if (!passwordValidation.isValid) {
+          error = passwordValidation.error || '';
+        }
+        break;
+      case 'confirmPassword':
+        const confirmValidation = validatePasswordConfirmation(password, value);
+        if (!confirmValidation.isValid) {
+          error = confirmValidation.error || '';
+        }
+        break;
+    }
+    
+    setErrors(prev => ({ ...prev, [field]: error }));
+    return error === '';
   };
 
   const validateForm = () => {
-    let isValid = true;
-    
-    // Validar nome usando a função específica
-    if (!validateName(name)) {
-      isValid = false;
-    }
+    const isNameValid = validateField('name', name);
+    const isEmailValid = validateField('email', email);
+    const isPasswordValid = validateField('password', password);
+    const isConfirmPasswordValid = validateField('confirmPassword', confirmPassword);
 
-    // Validar email
-    if (!email.trim()) {
-      setEmailError('E-mail é obrigatório');
-      isValid = false;
-    } else if (!validateEmail(email)) {
-      setEmailError('E-mail inválido');
-      isValid = false;
-    } else {
-      setEmailError('');
-    }
-
-    // Validar senha
-    if (!password.trim()) {
-      setPasswordError('Senha é obrigatória');
-      isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Senha deve ter pelo menos 6 caracteres');
-      isValid = false;
-    } else {
-      setPasswordError('');
-    }
-
-    // Validar confirmação de senha
-    if (!confirmPassword.trim()) {
-      setConfirmPasswordError('Confirmação de senha é obrigatória');
-      isValid = false;
-    } else if (password !== confirmPassword) {
-      setConfirmPasswordError('Senhas não coincidem');
-      isValid = false;
-    } else {
-      setConfirmPasswordError('');
-    }
-
-    return isValid;
+    return isNameValid && isEmailValid && isPasswordValid && isConfirmPasswordValid;
   };
 
   const handlePressSelectLevel = async () => {
@@ -124,20 +102,26 @@ export default function RegisterUser({ navigation }) {
     
     try {
       await register({ name, email, password });
+      
+      Alert.alert('Sucesso!', 'Conta criada com sucesso!');
       navigation.navigate('SelectLevelPerson');
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível criar a conta. Verifique os dados e tente novamente.');
+    } catch (error: any) {
+      console.error('Erro no cadastro:', error);
+      
+      // Tratamento de erro simples
+      Alert.alert('Erro', 'Não foi possível criar a conta. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      >
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.scrollViewContent}
@@ -150,69 +134,96 @@ export default function RegisterUser({ navigation }) {
           ]}
         >
           <View style={styles.containerImage}>
-            <Image source={musico} style={styles.image} />
+            <Image 
+              source={musico} 
+              style={[
+                styles.image, 
+                { 
+                  width: windowWidth * 0.6, 
+                  height: windowHeight * (keyboardVisible ? 0.2 : 0.3) 
+                }
+              ]} 
+            />
           </View>
 
-          <TitleComponent color={''} fontFamily={''} title={'Vamos criar sua conta'} fontSize={''} truncate={false}></TitleComponent>
-
-          <SubTitleComponent fontFamily={''} marginRight={''} marginTop={''} color={''} subtitle={'Preencha seus dados e prepare-se para uma incrível aventura musical!'}></SubTitleComponent>
-
-          <SubTitleComponent subtitle={'Nome completo'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
-          <Input 
-            onChangeText={(text) => {
-              // Limitar a 15 caracteres (apenas primeiro nome)
-              if (text.length > 15) {
-                return; // Não permitir mais de 15 caracteres
-              }
-              
-              setName(text);
-              // Validar em tempo real
-              if (text.length > 0) {
-                validateName(text);
-              } else {
-                setNameError('');
-              }
-            }}
-            onBlur={() => validateName(name)}
-            placeholder={'Seu primeiro nome'} 
-            secureTextEntry={false} 
-            styleWidth={{ width: windowWidth * 0.85 }}
-            value={name}
-            error={nameError}
-            autoCapitalize="words"
-            maxLength={15}
+          <SubTitleComponent 
+            subtitle={'Olá, futuro músico!'} 
+            color={'#A3A3A3'} 
+            FontFamily={'Roboto-Light'} 
+            MarginRight={24} 
+            MarginTop={14} 
+          />
+          <TitleComponent 
+            title={'Vamos criar sua conta?'} 
+            color={''} 
+            fontFamily={''} 
+            truncate={false}
+          />
+          <SubTitleComponent 
+            subtitle="Preencha os dados abaixo para começar sua jornada musical." 
+            color="#A3A3A3" 
+            FontFamily="Roboto-Light" 
+            MarginRight={24} 
+            MarginTop={12} 
           />
 
-          <SubTitleComponent subtitle={'E-mail'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
+          <SubTitleComponent 
+            subtitle={'Nome'} 
+            color={'#A3A3A3'} 
+            MarginTop={24} 
+            FontFamily={''} 
+            MarginRight={0} 
+          />
           <Input 
-            onChangeText={(text) => {
-              setEmail(text);
-              if (emailError) setEmailError('');
-            }}
-            placeholder={'Digite seu melhor e-mail'} 
+            onChangeText={setName}
+            placeholder={"Digite seu primeiro nome"} 
             secureTextEntry={false} 
-            styleWidth={{ width: windowWidth * 0.85 }}
+            styleWidth={{ width: windowWidth * 0.85 }} 
+            value={name}
+            error={errors.name}
+            autoCapitalize="words"
+            autoCorrect={false}
+            onBlur={() => validateField('name', name)}
+          />
+
+          <SubTitleComponent 
+            subtitle={'E-mail'} 
+            color={'#A3A3A3'} 
+            MarginTop={16} 
+            FontFamily={''} 
+            MarginRight={0} 
+          />
+          <Input 
+            onChangeText={setEmail}
+            placeholder={"Digite seu melhor e-mail"} 
+            secureTextEntry={false} 
+            styleWidth={{ width: windowWidth * 0.85 }} 
             value={email}
-            error={emailError}
+            error={errors.email}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            onBlur={() => validateField('email', email)}
           />
 
-          <SubTitleComponent subtitle={'Senha'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
+          <SubTitleComponent 
+            subtitle={'Senha'} 
+            color={'#A3A3A3'} 
+            MarginTop={16} 
+            FontFamily={''} 
+            MarginRight={0} 
+          />
           <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
             <Input 
-              onChangeText={(text) => {
-                setPassword(text);
-                if (passwordError) setPasswordError('');
-              }}
-              placeholder={'Crie uma senha'} 
+              onChangeText={setPassword}
+              placeholder={"Digite uma senha segura"} 
               secureTextEntry={!showPassword} 
-              styleWidth={{ width: windowWidth * 0.85 }}
+              styleWidth={{ width: windowWidth * 0.85 }} 
               value={password}
-              error={passwordError}
+              error={errors.password}
               autoCapitalize="none"
               autoCorrect={false}
+              onBlur={() => validateField('password', password)}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIconContainer}>
               <Image
@@ -222,22 +233,26 @@ export default function RegisterUser({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <SubTitleComponent subtitle={'Confirmar Senha'} fontFamily={''} marginRight={''} marginTop={''} color={''}></SubTitleComponent>
+          <SubTitleComponent 
+            subtitle={'Confirmar Senha'} 
+            color={'#A3A3A3'} 
+            MarginTop={16} 
+            FontFamily={''} 
+            MarginRight={0} 
+          />
           <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
             <Input 
-              onChangeText={(text) => {
-                setConfirmPassword(text);
-                if (confirmPasswordError) setConfirmPasswordError('');
-              }}
-              placeholder={'Digite sua senha novamente'} 
+              onChangeText={setConfirmPassword}
+              placeholder={"Digite a senha novamente"} 
               secureTextEntry={!showConfirmPassword} 
-              styleWidth={{ width: windowWidth * 0.85 }}
+              styleWidth={{ width: windowWidth * 0.85 }} 
               value={confirmPassword}
-              error={confirmPasswordError}
+              error={errors.confirmPassword}
               autoCapitalize="none"
               autoCorrect={false}
+              onBlur={() => validateField('confirmPassword', confirmPassword)}
             />
-            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIconContainer}> 
+            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIconContainer}>
               <Image
                 source={showConfirmPassword ? eyeIcon : eyeOffIcon}
                 style={styles.eyeIcon}
@@ -254,8 +269,9 @@ export default function RegisterUser({ navigation }) {
           />
 
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -267,42 +283,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     width: '100%',
   },
-  containerForm: {
-    flex: 1,
-    backgroundColor: 'white',
-    width: '100%',
-    height: '100%',
-    paddingHorizontal: 24
-  },
   scrollViewContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  containerImage: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  containerForm: {
+    backgroundColor: 'white',
     width: '100%',
-    marginTop: '15%',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    marginTop: -50,
+  },
+  containerImage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   image: {
-    width: '100%',
-    height: 270,
+    resizeMode: 'contain',
   },
   passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     position: 'relative',
+    marginBottom: 16,
   },
   eyeIconContainer: {
     position: 'absolute',
-    right: 10,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    right: 15,
+    top: 15,
+    padding: 5,
   },
   eyeIcon: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
   },
 });

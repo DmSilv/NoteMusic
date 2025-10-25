@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import TitleComponent from '../Components/Title/Title';
 import SubTitleComponent from '../Components/SubTitle/SubTitle';
@@ -123,6 +124,10 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
             }
 
             setIsLoading(true);
+            
+            // ⚠️ TEMPORÁRIO: Não passar nível (filtro desabilitado no service)
+            console.log(`🔍 Carregando TODAS as categorias`);
+            
             const moduleCategories = await moduleService.getModulesByCategory();
             console.log('📚 CATEGORIAS CARREGADAS NO FRONTEND:');
             console.log('Total:', moduleCategories?.length || 0);
@@ -444,6 +449,49 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     };
 
 
+    // Mapeamento de nomes de categorias por nível (usando IDs que vêm do backend)
+    const getCategoryNameByLevel = useCallback((categoryName: string, level: string): string => {
+        const nameMapping: Record<string, Record<string, string>> = {
+            'propriedades-som': {
+                'aprendiz': 'Fundamentos do Som',
+                'virtuoso': 'Propriedades Sonoras',
+                'maestro': 'Acústica Avançada'
+            },
+            'intervalos-musicais': {
+                'aprendiz': 'Iniciação aos Intervalos',
+                'virtuoso': 'Intervalos e Harmonia',
+                'maestro': 'Harmonia Complexa'
+            },
+            'figuras-musicais': {
+                'aprendiz': 'Notação Básica',
+                'virtuoso': 'Leitura Musical',
+                'maestro': 'Notação Avançada'
+            },
+            'ritmo-ternarios': {
+                'aprendiz': 'Tempo e Pulsação',
+                'virtuoso': 'Ritmos Complexos',
+                'maestro': 'Polirritmia'
+            },
+            'compasso-simples': {
+                'aprendiz': 'Compassos Básicos',
+                'virtuoso': 'Compassos Aplicados',
+                'maestro': 'Métricas Complexas'
+            },
+            'escalas-maiores': {
+                'aprendiz': 'Escalas Iniciais',
+                'virtuoso': 'Escalas e Tonalidades',
+                'maestro': 'Sistema Tonal'
+            },
+            'compasso-composto': {
+                'aprendiz': 'Introdução aos Compostos',
+                'virtuoso': 'Compassos Compostos',
+                'maestro': 'Métricas Irregulares'
+            }
+        };
+        
+        return nameMapping[categoryName]?.[level] || categoryName;
+    }, []);
+
     const renderCard = useCallback((category: ModuleCategoryType) => {
         if (!category || !category.name) {
             return null;
@@ -452,6 +500,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         // Usar função memoizada para determinar nível da categoria
         const categoryLevel = getCategoryLevel(category);
         const crownColor = getCrownColor(categoryLevel);
+        const displayName = getCategoryNameByLevel(category.name, categoryLevel);
         
         // Verificar se a categoria está realmente concluída (validação real)
         const isCategoryCompleted = isCategoryReallyCompleted(category);
@@ -498,7 +547,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                                 numberOfLines={2}
                                 ellipsizeMode="clip"
                             >
-                                {category.name}
+                                {displayName}
                             </Text>
                         </View>
                     </View>
@@ -539,10 +588,11 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
         );
-    }, [getCategoryLevel, isCategoryReallyCompleted, quizCompletionStatus, handlePressContentListCategory]);
+    }, [getCategoryLevel, getCategoryNameByLevel, isCategoryReallyCompleted, quizCompletionStatus, handlePressContentListCategory]);
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+            <View style={styles.container}>
             <ScrollView>
                 {/* Barra Superior */}
                 <View style={styles.header}>
@@ -820,7 +870,8 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                     )}
                 </View>
             </ScrollView>
-        </View>
+            </View>
+        </SafeAreaView>
     );
 }
 
