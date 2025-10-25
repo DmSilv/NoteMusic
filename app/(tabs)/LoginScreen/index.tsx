@@ -2,6 +2,7 @@ import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingVie
 import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import garota_sentada from '../../../assets/images/garota_janela.png';
 import eyeIcon from '../../../assets/images/eye.png'; 
 import eyeOffIcon from '../../../assets/images/eye-off.png'; 
@@ -13,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import useFormValidation from '../../../hooks/useFormValidation';
 import useAsyncOperation from '../../../hooks/useAsyncOperation';
 import useErrorHandler from '../../../hooks/useErrorHandler';
+import useStatusBar from '../../../hooks/useStatusBar';
 
 export default function LoginScreen({ navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -38,6 +40,13 @@ export default function LoginScreen({ navigation }: any) {
   
   // Hook para tratamento de erros
   const { showError } = useErrorHandler();
+
+  // Hook para personalizar StatusBar
+  useStatusBar({
+    backgroundColor: '#007AFF',
+    barStyle: 'light-content',
+    translucent: false
+  });
 
   // Verificar se há credenciais salvas
   useEffect(() => {
@@ -78,6 +87,39 @@ export default function LoginScreen({ navigation }: any) {
 
   const handlePressRemenberPassword = () => {
     navigation.navigate('RemenberPassword');
+  };
+
+  const handleClearSavedCredentials = async () => {
+    Alert.alert(
+      'Remover Dados Salvos',
+      'Deseja remover seus dados de email e senha salvos? Você precisará digitar novamente na próxima vez.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('@NoteMusic:savedEmail');
+              await AsyncStorage.removeItem('@NoteMusic:savedPassword');
+              await AsyncStorage.removeItem('@NoteMusic:autoLogin');
+              
+              setValue('email', '');
+              setValue('password', '');
+              setRememberMe(false);
+              
+              Alert.alert('Pronto!', 'Seus dados foram removidos. Na próxima vez você precisará digitar email e senha novamente.');
+            } catch (error) {
+              console.error('Erro ao limpar credenciais:', error);
+              Alert.alert('Ops!', 'Não foi possível remover os dados salvos.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handlePressProfile = async () => {
@@ -121,7 +163,7 @@ export default function LoginScreen({ navigation }: any) {
   }, []);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -139,26 +181,41 @@ export default function LoginScreen({ navigation }: any) {
             style={[
               styles.image, 
               { 
-                width: windowWidth, 
-                height: windowHeight * (keyboardVisible ? 0.3 : 0.5) 
+                width: windowWidth * 0.95, 
+                height: windowHeight * (keyboardVisible ? 0.22 : 0.32) 
               }
             ]} 
           />
         </View>
 
         <View style={styles.containerForm}>
+          {/* Botão discreto para limpar credenciais */}
+          {rememberMe && (
+            <TouchableOpacity 
+              onPress={handleClearSavedCredentials} 
+              style={styles.clearCredentialsButton}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons 
+                name="account-cancel" 
+                size={18} 
+                color="#76B0F1" 
+              />
+            </TouchableOpacity>
+          )}
+          
           <SubTitleComponent 
             subtitle={'Olá, artista!'} 
             color={'#A3A3A3'} 
             fontFamily={'Roboto-Light'} 
             marginRight={24} 
-            marginTop={14} 
+            marginTop={4} 
           />
           <TitleComponent 
             title={'Pronto para dar o play?'} 
             color={''} 
             fontFamily={''} 
-            fontSize={24}
+            fontSize={22}
             truncate={false}
           />
           <SubTitleComponent 
@@ -166,13 +223,13 @@ export default function LoginScreen({ navigation }: any) {
             color="#A3A3A3" 
             fontFamily="Roboto-Light" 
             marginRight={24} 
-            marginTop={12} 
+            marginTop={4} 
           />
 
           <SubTitleComponent 
             subtitle={'E-mail'} 
             color={'#A3A3A3'} 
-            marginTop={24} 
+            marginTop={12} 
             fontFamily={''} 
             marginRight={0} 
           />
@@ -192,7 +249,7 @@ export default function LoginScreen({ navigation }: any) {
           <SubTitleComponent 
             subtitle={'Senha'} 
             color={'#A3A3A3'} 
-            marginTop={16} 
+            marginTop={8} 
             fontFamily={''} 
             marginRight={0} 
           />
@@ -232,7 +289,13 @@ export default function LoginScreen({ navigation }: any) {
               trackColor={{ false: '#D9D9D9', true: '#76B0F1' }}
               thumbColor={rememberMe ? '#0087D3' : '#f4f3f4'}
             />
-            <Text style={styles.rememberMeText}>Lembrar-me</Text>
+            <TouchableOpacity 
+              onPress={() => setRememberMe(!rememberMe)}
+              activeOpacity={0.7}
+              style={styles.rememberMeTextContainer}
+            >
+              <Text style={styles.rememberMeText}>Lembrar-me</Text>
+            </TouchableOpacity>
           </View>
           
           <View style={styles.containerLine}>
@@ -273,19 +336,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'white',
-    alignSelf: 'center'
+    alignSelf: 'center',
   },
   scrollViewContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    minHeight: '100%',
   },
   containerForm: {
     backgroundColor: 'white',
     width: '100%',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    marginTop: -45,
+    marginTop: -20,
+    flex: 1,
+    justifyContent: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   containerImage: {
     alignItems: 'center',
@@ -312,19 +383,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    marginBottom: 16,
+    marginTop: 12,
+    marginBottom: 8,
   },
   rememberMeText: {
     marginLeft: 8,
     fontSize: 14,
     color: '#666',
   },
+  rememberMeTextContainer: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
   containerLine: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 20,
+    marginVertical: 8,
   },
   line: {
     width: 60,
@@ -338,6 +413,20 @@ const styles = StyleSheet.create({
   },
   RememberPassword: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 4,
+  },
+  clearCredentialsButton: {
+    position: 'absolute',
+    top: 10,
+    right: 20,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 135, 211, 0.08)', // Azul muito clarinho
+    borderWidth: 1,
+    borderColor: 'rgba(0, 135, 211, 0.15)', // Azul clarinho na borda
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

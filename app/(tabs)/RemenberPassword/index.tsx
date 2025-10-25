@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, Linking } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, Linking, StatusBar } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import garota_sentada from '../../../assets/images/autenticacao.png';
@@ -10,7 +10,7 @@ import ButtonComponent from '../Components/Form/Button/PrimaryButton/PrimaryButt
 import apiService from '../../../services/api';
 import { validateEmail } from '../../../utils/validation';
 
-export default function ForgotPasswordScreen({ navigation }) {
+export default function ForgotPasswordScreen({ navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -47,10 +47,7 @@ export default function ForgotPasswordScreen({ navigation }) {
     setIsLoading(true);
     
     try {
-      const response = await apiService.request('/auth/forgotpassword', {
-        method: 'POST',
-        body: JSON.stringify({ email }),
-      });
+      const response = await apiService.forgotPassword(email);
 
       Alert.alert('Sucesso!', 'Email de recuperação enviado!', [
         {
@@ -85,7 +82,14 @@ export default function ForgotPasswordScreen({ navigation }) {
   }, []);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+    <>
+      <StatusBar 
+        barStyle="light-content" 
+        backgroundColor="#0087D3" 
+        translucent={false}
+        animated={true}
+      />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -102,11 +106,17 @@ export default function ForgotPasswordScreen({ navigation }) {
 
         <View style={[styles.containerForm, { borderTopLeftRadius: keyboardVisible ? 0 : 40, borderTopRightRadius: keyboardVisible ? 0 : 40 }]}>
           
-          <TitleComponent color={''} fontFamily={''} title={'Esqueceu sua Senha?'} truncate={false}></TitleComponent>
+          <TitleComponent color={''} fontFamily={''} title={'Esqueceu sua Senha?'} fontSize={24} truncate={false}></TitleComponent>
           
-          <SubTitleComponent FontFamily={'Roboto'} MarginRight={0} MarginTop={0} color={''} subtitle={'Não se preocupe! Insira seu e-mail abaixo e enviaremos as instruções para redefinir sua senha. Você logo estará de volta à sua jornada musical!'}></SubTitleComponent>
+          <SubTitleComponent fontFamily={'Roboto'} marginRight={0} marginTop={0} color={''} subtitle={'Não se preocupe! Insira seu e-mail abaixo e enviaremos as instruções para redefinir sua senha. Você logo estará de volta à sua jornada musical!'}></SubTitleComponent>
 
-          <LabelComponent text={'E-mail'}></LabelComponent>
+          <SubTitleComponent 
+            subtitle={'E-mail'} 
+            color={'#A3A3A3'} 
+            marginTop={12} 
+            fontFamily={''} 
+            marginRight={0} 
+          />
           <Input 
             onChangeText={setEmail} 
             value={email}
@@ -126,6 +136,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </>
   );
 }
 

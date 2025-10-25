@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, StatusBar, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import { AuthProvider } from './contexts/AuthContext';
 import SelectionScreen from './(tabs)/SelectionScreen/SelectionScreen';
@@ -19,21 +19,16 @@ import ContentListCategory from './(tabs)/ModuleCategory/ContentListCategory/Con
 import QuizIntroScreen from './(tabs)/Quiz/QuizIntroScreen/QuizIntroScreen';
 import ChangePassword from './(tabs)/ChangePassword/ChangePassword';
 import LevelStats from './(tabs)/LevelStats/LevelStats';
+import AccountDeletion from './(tabs)/AccountDeletion';
+import DeactivatedAccount from './(tabs)/DeactivatedAccount';
+import ProtectedRoute from './Components/ProtectedRoute/ProtectedRoute';
 const Stack = createNativeStackNavigator();
 
 const fetchFonts = () => {
   return Font.loadAsync({
-  // Fonts Roboto
-  'Roboto-Light': require('../assets/fonts/Roboto-Light.ttf'),
-  'Roboto-Medium': require('../assets/fonts/Roboto-Medium.ttf'),
-  'Roboto-Regular': require('../assets/fonts/Roboto-Regular.ttf'),
-  'Roboto-Bold': require('../assets/fonts/Roboto-Bold.ttf'),
-  // Fonts Poppins
-  'Poppins-Regular': require('../assets/fonts/Poppins-Regular.ttf'),
-  'Poppins-Light': require('../assets/fonts/Poppins-Light.ttf'),
-  'Poppins-Medium': require('../assets/fonts/Poppins-Medium.ttf'),
-  'Poppins-Bold': require('../assets/fonts/Poppins-Bold.ttf'),
-  'Poppins-SemiBold': require('../assets/fonts/Poppins-SemiBold.ttf'),
+    'Roboto-Light': require('../assets/fonts/Roboto-Light.ttf'),
+    'Roboto-Regular': require('../assets/fonts/Roboto-Regular.ttf'),
+    'Roboto-Bold': require('../assets/fonts/Roboto-Bold.ttf'),
   });
 };
 
@@ -42,8 +37,14 @@ function App() {
 
   useEffect(() => {
     const loadFonts = async () => {
-      await fetchFonts();
-      setFontsLoaded(true);
+      try {
+        await fetchFonts();
+        setFontsLoaded(true);
+      } catch (error) {
+        console.error('Erro ao carregar fontes:', error);
+        // Mesmo com erro nas fontes, continuar o app
+        setFontsLoaded(true);
+      }
     };
     loadFonts();
   }, []);
@@ -56,8 +57,8 @@ function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer independent={true}>
-          <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}> 
+        <NavigationContainer >
+         
             <Stack.Navigator  
             screenOptions={{
             animation: 'slide_from_right', // Mude a animação conforme desejado
@@ -66,7 +67,7 @@ function App() {
               <Stack.Screen name="SelectionScreen" component={SelectionScreen} options={{ headerShown: false }} />
               <Stack.Screen name="LoginScreen" component={LoginScreen} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
               <Stack.Screen name="RegisterUser" component={RegisterUser} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_left' }} />
-              <Stack.Screen name="RemenberPassword" component={RemenberPassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="RemenberPassword" component={RemenberPassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar',  }} />
               <Stack.Screen name="SelectLevelPerson" component={SelectLevelPerson} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_left' }} />
               
               <Stack.Screen name="ProfileHome" component={ProfileHome} options={{ headerShown: false, animation: 'fade' }} />
@@ -80,13 +81,12 @@ function App() {
               <Stack.Screen name="LevelStats" component={LevelStats} options={{ headerShown: false }} />
 
             </Stack.Navigator>
-          </SafeAreaView>
+         
         </NavigationContainer>
       </AuthProvider>
     </SafeAreaProvider>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

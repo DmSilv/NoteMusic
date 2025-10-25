@@ -2,9 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { validateModuleId, validateQuizId, getInvalidIdMessage } from '../utils/validation';
 
 // Configuração da API
-const API_BASE_URL = 'http://192.168.1.4:3333/api'; // IP local da máquina
-// const API_BASE_URL = 'http://10.0.2.2:3333/api'; // Para Android Emulator
-// const API_BASE_URL = 'http://localhost:3333/api'; // Para iOS Simulator
+const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // ✅ PRODUÇÃO (Railway)
+// const API_BASE_URL = 'http://192.168.1.5:3333/api'; // IP local da máquina (desenvolvimento)
+// const API_BASE_URL = 'http://10.0.2.2:3333/api'; // Para Android Emulator (desenvolvimento)
+// const API_BASE_URL = 'http://localhost:3333/api'; // Para iOS Simulator (desenvolvimento)
 
 // Tipos de dados
 export interface User {
@@ -58,6 +59,7 @@ export interface Quiz {
   level: string;
   type: string;
   timeLimit?: number;
+  passingScore?: number; // ✅ Nota mínima para aprovação (%)
   totalQuestions?: number;
   attemptsRemaining?: number;
 }
@@ -193,6 +195,11 @@ class ApiService {
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     
+    console.log('🌐 ApiService.request: Fazendo requisição...');
+    console.log('📍 URL:', url);
+    console.log('📋 Método:', options.method || 'GET');
+    console.log('📤 Body:', options.body);
+    
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -200,6 +207,9 @@ class ApiService {
 
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
+      console.log('🔑 Token incluído na requisição');
+    } else {
+      console.log('⚠️ Nenhum token encontrado');
     }
 
     const config: RequestInit = {
@@ -208,19 +218,27 @@ class ApiService {
     };
 
     try {
+      console.log('🚀 Enviando requisição...');
       const response = await fetch(url, config);
+      
+      console.log('📡 Resposta recebida:');
+      console.log('  - Status:', response.status);
+      console.log('  - Status Text:', response.statusText);
+      console.log('  - Headers:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.message || `HTTP error! status: ${response.status}`;
-        console.error(`Erro na requisição ${endpoint}:`, errorMessage);
+        console.error(`❌ Erro na requisição ${endpoint}:`, errorMessage);
+        console.error('❌ Dados do erro:', errorData);
         throw new Error(errorMessage);
       }
 
       const data = await response.json();
+      console.log('✅ Dados da resposta:', data);
       return data;
     } catch (error) {
-      console.error(`Erro na requisição ${endpoint}:`, error);
+      console.error(`❌ Erro na requisição ${endpoint}:`, error);
       throw error;
     }
   }
@@ -237,17 +255,37 @@ class ApiService {
   }
 
   async register(data: RegisterData): Promise<{ user: User; token: string }> {
-    const response = await this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    console.log('🔍 ApiService: Iniciando registro...');
+    console.log('📤 ApiService: Dados recebidos:', data);
     
-    await this.saveToken(response.token);
-    return response;
+    try {
+      console.log('🌐 ApiService: Fazendo requisição para /auth/register...');
+      const response = await this.request('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      
+      console.log('✅ ApiService: Resposta recebida:', response);
+      
+      await this.saveToken(response.token);
+      console.log('✅ ApiService: Token salvo com sucesso');
+      
+      return response;
+    } catch (error) {
+      console.error('❌ ApiService: Erro na requisição:', error);
+      throw error;
+    }
   }
 
   async logout(): Promise<void> {
     await this.removeToken();
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    return await this.request('/auth/forgotpassword', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
   }
 
   async getProfile(): Promise<User> {
@@ -281,27 +319,71 @@ class ApiService {
     return response.user;
   }
 
+  async updatePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await this.request('/auth/changetemppassword', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  }
+
   // Métodos de módulos
   async getModules(): Promise<Module[]> {
     try {
+      console.log('🔍 Buscando todos os módulos da API...');
       const response = await this.request('/modules');
+      
+      console.log('📊 Resposta da API de módulos:', 
+        response ? (typeof response === 'object' ? 'Objeto JSON recebido' : typeof response) : 'undefined');
+      
       // Normalizar para um array de módulos
-      const list = response?.modules && Array.isArray(response.modules)
-        ? response.modules
-        : (Array.isArray(response) ? response : []);
+      let list;
+      if (response?.modules && Array.isArray(response.modules)) {
+        console.log('✅ Formato esperado: { modules: [...] }');
+        list = response.modules;
+      } else if (Array.isArray(response)) {
+        console.log('✅ Formato alternativo: array direto');
+        list = response;
+      } else if (response && typeof response === 'object') {
+        // Tentativa de recuperar o array de módulos de outra propriedade
+        const modules = Object.values(response).find(value => Array.isArray(value));
+        if (modules) {
+          console.log('⚠️ Encontrado array de módulos em outra propriedade');
+          list = modules;
+        } else {
+          console.warn('⚠️ Nenhum array encontrado na resposta, usando array vazio');
+          list = [];
+        }
+      } else {
+        console.error('❌ Formato inesperado na resposta', response);
+        list = [];
+      }
+      
+      console.log(`📚 Total de módulos encontrados: ${list.length}`);
+      
+      // Se tem módulos, logar um exemplo para debug
+      if (list.length > 0) {
+        console.log('📋 Exemplo de módulo:', {
+          _id: list[0]._id,
+          id: list[0].id,
+          title: list[0].title,
+          category: list[0].category
+        });
+      }
 
-      // Mapear _id -> id
+      // Mapear _id -> id e garantir que todos os campos necessários existam
       return list.map((m: any) => ({
-        id: m._id || m.id,
-        title: m.title,
-        description: m.description,
-        category: m.category,
-        content: m.content,
-        order: m.order,
+        id: m._id || m.id || 'id-não-definido',
+        title: m.title || 'Sem título',
+        description: m.description || 'Sem descrição',
+        category: m.category || 'geral',
+        content: m.content || {},
+        level: m.level || 'aprendiz',
+        order: m.order || 0,
         completedBy: m.completedBy || [],
       } as Module));
     } catch (error) {
-      console.error('Erro ao buscar módulos:', error);
+      console.error('❌ Erro ao buscar módulos:', error);
+      console.error('Detalhes do erro:', error instanceof Error ? error.message : String(error));
       return [];
     }
   }
@@ -338,17 +420,26 @@ class ApiService {
         throw new Error(getInvalidIdMessage(moduleId, 'módulo'));
       }
 
-      // Usar endpoint privado que traz o quiz real do módulo
-      const response = await this.request(`/quiz/${moduleId}/private`);
+      console.log(`🔍 Buscando quiz para módulo: ${moduleId}`);
+      
+      // Usar o endpoint correto no backend
+      const response = await this.request(`/quiz/${moduleId}`);
+      
+      // Registrar resposta para debug
+      console.log(`📊 Resposta do servidor para quiz ${moduleId}:`, 
+        response ? 'Dados recebidos' : 'Nenhum dado');
 
       // Backend retorna { success, quiz: { _id, title, questions: [{ question, options[{ label }]] } }
       const serverQuiz = response?.quiz || response;
+      
+      console.log(`📋 Dados do quiz:`, 
+        serverQuiz ? `Título: ${serverQuiz.title}, Questões: ${serverQuiz.questions?.length || 0}` : 'Dados inválidos');
 
       // Verificar estrutura
       if (serverQuiz && Array.isArray(serverQuiz.questions)) {
         // Mapear para o tipo do app
         const mapped: Quiz = {
-          id: serverQuiz._id || moduleId,
+          id: serverQuiz._id || serverQuiz.id || moduleId,
           title: serverQuiz.title,
           description: serverQuiz.description || '',
           category: serverQuiz.category || 'module',
@@ -360,7 +451,7 @@ class ApiService {
               id: opt.id || opt._id,
               label: opt.label || opt.optionText,
               optionText: opt.label || opt.optionText, // Para compatibilidade
-              // isCorrect não é exposto pelo backend nas rotas privadas
+              // isCorrect não é exposto pelo backend nas rotas públicas
               isCorrect: false
             })),
             explanation: q.explanation || '',
@@ -374,14 +465,17 @@ class ApiService {
           totalQuestions: serverQuiz.totalQuestions || serverQuiz.questions.length,
           attemptsRemaining: serverQuiz.attemptsRemaining
         };
+        
+        console.log(`✅ Quiz mapeado com sucesso:`, 
+          `ID: ${mapped.id}, Título: ${mapped.title}, Questões: ${mapped.questions.length}`);
 
         return mapped;
       } else {
-        console.error('Resposta inesperada de /quiz (private):', response);
+        console.error('❌ Resposta inesperada de /quiz:', serverQuiz);
         throw new Error('Dados do quiz inválidos');
       }
     } catch (error) {
-      console.error('Erro ao buscar quiz:', error);
+      console.error('❌ Erro ao buscar quiz:', error);
       throw error;
     }
   }
@@ -393,8 +487,9 @@ class ApiService {
         throw new Error(getInvalidIdMessage(submission.quizId, 'quiz'));
       }
 
-      // Usar endpoint público para submissão
-      const response = await this.request(`/quiz/${submission.quizId}/submit`, {
+      // ✅ USAR ENDPOINT PRIVADO PARA SALVAR PONTOS NO USUÁRIO
+      // A rota /submit/private requer autenticação e salva os pontos no perfil do usuário
+      const response = await this.request(`/quiz/${submission.quizId}/submit/private`, {
         method: 'POST',
         body: JSON.stringify(submission),
       });
@@ -429,7 +524,12 @@ class ApiService {
   async getDailyChallenge(): Promise<Quiz> {
     try {
       const response = await this.request('/quiz/daily-challenge');
-      const serverQuiz = response?.quiz || response;
+      
+      // Verificar se temos dailyChallenge na resposta (formato correto do backend)
+      const serverQuiz = response?.dailyChallenge || response?.quiz || response;
+      
+      console.log('📊 Resposta de desafio diário recebida:', 
+        serverQuiz ? `Título: ${serverQuiz.title}, Questões: ${serverQuiz.questions?.length || 0}` : 'Nenhum dado');
 
       // Verificar se a resposta é válida e mapear para o tipo do app
       if (serverQuiz && serverQuiz.questions && Array.isArray(serverQuiz.questions)) {
@@ -444,7 +544,7 @@ class ApiService {
             questionText: q.question || q.questionText, // Para compatibilidade
             options: (q.options || []).map((opt: any) => ({
               id: opt.id || opt._id,
-              label: opt.optionText || opt.label,
+              label: opt.label || opt.optionText,
               optionText: opt.optionText || opt.label, // Para compatibilidade
               isCorrect: opt.isCorrect || false
             })),
@@ -458,11 +558,16 @@ class ApiService {
           timeLimit: serverQuiz.timeLimit,
           totalQuestions: serverQuiz.questions.length
         };
+        
+        console.log('✅ Desafio diário mapeado com sucesso:', 
+          `ID: ${mapped.id}, Título: ${mapped.title}, Questões: ${mapped.questions.length}`);
         return mapped;
       }
+      
+      console.error('❌ Estrutura de desafio diário inválida:', serverQuiz);
       throw new Error('Dados do desafio diário inválidos');
     } catch (error) {
-      console.error('Erro ao buscar desafio diário:', error);
+      console.error('❌ Erro ao buscar desafio diário:', error);
       throw error;
     }
   }
@@ -562,21 +667,103 @@ class ApiService {
     return await this.request('/gamification/leaderboard');
   }
 
+  // Método para obter conclusão de categorias
+  async getCategoryCompletion(level?: string): Promise<any> {
+    try {
+      // O endpoint correto está no controlador de gamificação
+      const endpoint = level ? `/gamification/category-completion?level=${level}` : '/gamification/category-completion';
+      return await this.request(endpoint);
+    } catch (error) {
+      console.error('Erro ao carregar conclusão de categorias:', error);
+      // Retornar objeto vazio em caso de erro
+      return { categoryCompletion: [] };
+    }
+  }
+
+  // Métodos de exclusão de conta
+  async requestAccountDeletion(data: {
+    password: string;
+    confirmation: string;
+    reason?: string;
+  }): Promise<any> {
+    return await this.request('/auth/delete-account', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelAccountDeletion(): Promise<any> {
+    return await this.request('/auth/cancel-deletion', {
+      method: 'POST',
+    });
+  }
+
+  async getDeletionStatus(): Promise<any> {
+    return await this.request('/auth/deletion-status');
+  }
+
   // Método para validar questão individual
   async validateQuestion(quizId: string, questionIndex: number, selectedAnswer: number): Promise<QuestionValidationResult> {
     try {
-      const response = await this.request(`/quiz/${quizId}/validate-question`, {
+      console.log(`🔍 API: Validando questão ${questionIndex} do quiz ${quizId}, resposta: ${selectedAnswer}`);
+      
+      // Usar o endpoint correto conforme definido no backend (quiz.routes.js)
+      // A rota correta é /quiz/:quizId/validate/:questionIndex
+      const response = await this.request(`/quiz/${quizId}/validate/${questionIndex}`, {
         method: 'POST',
         body: JSON.stringify({
-          questionIndex,
           selectedAnswer
         })
       });
       
+      // Verificar se a resposta tem a estrutura esperada
+      if (!response || typeof response.isCorrect !== 'boolean') {
+        console.error('❌ Resposta inválida da validação:', response);
+        throw new Error('Resposta inválida do servidor na validação da questão');
+      }
+      
+      console.log(`✅ Validação recebida: ${response.isCorrect ? 'Correta' : 'Incorreta'}`);
       return response;
     } catch (error) {
       console.error('Erro ao validar questão:', error);
       throw error;
+    }
+  }
+
+  // Método para verificar tentativas do quiz
+  async checkQuizAttempt(quizId: string, moduleId: string): Promise<any> {
+    try {
+      console.log(`🔍 API: Verificando tentativas do quiz ${quizId} para o módulo ${moduleId}`);
+      
+      // Endpoint para verificar tentativas (endpoint pode não existir no backend ainda)
+      // Por enquanto, retornar resposta padrão que permite tentativa
+      return {
+        success: true,
+        data: {
+          canAttempt: true,
+          attempts: {
+            current: 0,
+            remaining: 3,
+            maxAttempts: 3
+          },
+          cooldownUntil: null
+        }
+      };
+    } catch (error) {
+      console.error('Erro ao verificar tentativas do quiz:', error);
+      // Em caso de erro, permitir tentativa
+      return {
+        success: true,
+        data: {
+          canAttempt: true,
+          attempts: {
+            current: 0,
+            remaining: 3,
+            maxAttempts: 3
+          },
+          cooldownUntil: null
+        }
+      };
     }
   }
 
