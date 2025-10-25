@@ -1,37 +1,50 @@
 {
   "expo": {
-    "name": "notemusic",
+    "name": "NoteMusic",
     "slug": "notemusic",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "light",
     "splash": {
-      "image": "",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0087D3"
     },
-    "ios": {
-      "supportsTablet": true
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "statusBar": {
+      "style": "auto",
+      "backgroundColor": "#0087D3",
+      "translucent": false
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "",
-        "backgroundColor": "#ffffff"
-      }
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0087D3"
+      },
+      "statusBar": {
+        "backgroundColor": "#0087D3",
+        "barStyle": "light-content",
+        "translucent": false
+      },
+      "package": "com.notemusic.app"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "statusBar": {
+        "style": "dark-content"
+      },
+      "bundleIdentifier": "com.notemusic.app"
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": ""
+      "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      "expo-font"
-    ],
-    "experiments": {
-      "typedRoutes": true
+    "extra": {
+      "eas": {
+        "projectId": "ee739f31-d8e8-4f6a-8655-58742bb7756b"
+      }
     }
   }
 }
