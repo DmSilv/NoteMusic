@@ -7,7 +7,7 @@ console.log('📱 TESTE ESPECÍFICO PARA CELULAR FÍSICO\n');
 const testMobileConnection = () => {
   return new Promise((resolve) => {
     const options = {
-      hostname: '192.168.1.8',
+      hostname: '192.168.1.5',
       port: 3333,
       path: '/api/auth/login',
       method: 'POST',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp } from '@react-navigation/native';
@@ -509,7 +509,8 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#0087D3" />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Topo: Badge de nível, Saudação, Nome, Progresso */}
         <View style={styles.userHeader}>
@@ -633,10 +634,13 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 40,
     paddingBottom: 32,
     backgroundColor: '#F8F9FA',
     flexGrow: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -10,
   },
   userHeader: {
     flexDirection: 'row',

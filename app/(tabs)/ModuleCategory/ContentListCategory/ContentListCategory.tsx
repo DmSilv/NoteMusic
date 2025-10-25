@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -482,7 +482,14 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
     }
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+        <>
+            <StatusBar 
+                barStyle="light-content" 
+                backgroundColor="#0087D3" 
+                translucent={false}
+                animated={true}
+            />
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
             <View style={styles.container}>
             <View style={styles.Header}>
                 <View style={styles.backButtoncontainer}>
@@ -507,6 +514,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             />
             </View>
         </SafeAreaView>
+        </>
     );
 };
 

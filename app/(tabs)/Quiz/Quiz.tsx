@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import UserInfo from '../Components/UserInfo/Userinfo';
 import BackButton from '../Components/BackButton/BackButton';
@@ -643,7 +643,14 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     const isShowingFeedback = state.showFeedback && state.feedbackData;
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+        <>
+            <StatusBar 
+                barStyle="light-content" 
+                backgroundColor="#0087D3" 
+                translucent={false}
+                animated={true}
+            />
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
             <View style={styles.container}>
             <View style={styles.header}>
                 <View style={styles.backButtoncontainer}>
@@ -772,6 +779,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             </ScrollView>
             </View>
         </SafeAreaView>
+        </>
     );
 };
 

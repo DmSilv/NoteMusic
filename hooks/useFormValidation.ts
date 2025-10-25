@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { validateEmail as validateEmailDomain } from '../utils/validation';
 
 export interface ValidationRule {
   required?: boolean;
@@ -74,11 +75,11 @@ const useFormValidation = (
     else if (rules.pattern && !rules.pattern.test(value)) {
       error = `${field} inválido`;
     }
-    // Verificar email
+    // ✅ Verificar email com validação de domínio
     else if (rules.email) {
-      const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
-      if (!emailRegex.test(value)) {
-        error = 'E-mail inválido';
+      const emailValidation = validateEmailDomain(value);
+      if (!emailValidation.isValid) {
+        error = emailValidation.error || 'E-mail inválido';
       }
     }
     // Validação customizada

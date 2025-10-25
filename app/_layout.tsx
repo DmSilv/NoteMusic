@@ -67,7 +67,7 @@ function App() {
               <Stack.Screen name="SelectionScreen" component={SelectionScreen} options={{ headerShown: false }} />
               <Stack.Screen name="LoginScreen" component={LoginScreen} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
               <Stack.Screen name="RegisterUser" component={RegisterUser} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_left' }} />
-              <Stack.Screen name="RemenberPassword" component={RemenberPassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar',  }} />
+              <Stack.Screen name="RemenberPassword" component={RemenberPassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_bottom'  }} />
               <Stack.Screen name="SelectLevelPerson" component={SelectLevelPerson} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_left' }} />
               
               <Stack.Screen name="ProfileHome" component={ProfileHome} options={{ headerShown: false, animation: 'fade' }} />

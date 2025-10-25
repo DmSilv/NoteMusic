@@ -108,11 +108,11 @@ export const UserDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   });
 
-  // Função para carregar dados do usuário (versão simplificada)
+  // Função para carregar dados do usuário (versão otimizada)
   const loadUserData = useCallback(async (forceRefresh: boolean = false) => {
     // Evitar requisições muito frequentes (exceto se forçado)
-    if (!forceRefresh && state.lastUpdate && (Date.now() - state.lastUpdate.getTime()) < 30000) {
-      console.log('⏰ Evitando requisição muito frequente');
+    if (!forceRefresh && state.lastUpdate && (Date.now() - state.lastUpdate.getTime()) < 15000) {
+      console.log('⏰ Evitando requisição muito frequente (15s)');
       return;
     }
 

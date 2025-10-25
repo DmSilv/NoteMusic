@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -359,7 +359,14 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
     };
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+        <>
+            <StatusBar 
+                barStyle="light-content" 
+                backgroundColor="#0087D3" 
+                translucent={false}
+                animated={true}
+            />
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
             <View style={styles.container}>
             <ScrollView 
                 style={styles.scrollView} 
@@ -673,6 +680,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
             </ScrollView>
             </View>
         </SafeAreaView>
+        </>
     );
 };
 

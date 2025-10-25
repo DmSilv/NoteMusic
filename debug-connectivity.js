@@ -74,7 +74,7 @@ async function runTests() {
   const hosts = [
     'localhost',
     '127.0.0.1', 
-    '192.168.1.8',
+    '192.168.1.5',
     '0.0.0.0'
   ];
   
@@ -98,7 +98,7 @@ async function runTests() {
   
   console.log('🏁 Teste concluído!');
   console.log('\n💡 DICAS:');
-  console.log('- Se localhost funciona mas 192.168.1.8 não, é problema de rede');
+  console.log('- Se localhost funciona mas 192.168.1.5 não, é problema de rede');
   console.log('- Se nenhum funciona, o backend não está rodando');
   console.log('- Se porta está fechada, verificar firewall');
 }

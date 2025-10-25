@@ -1,5 +1,34 @@
 import { VALIDATION_RULES } from '../types/UserStats';
 
+// ✅ Lista de palavras inapropriadas para filtro de nomes
+const INAPPROPRIATE_WORDS = [
+  // Palavrões e variações comuns (português)
+  'porra', 'merda', 'caralho', 'puta', 'fdp', 'pqp', 'vsf', 'krl', 'crl',
+  'cu', 'bosta', 'buceta', 'pica', 'pau', 'viado', 'bicha', 'puto',
+  // Ofensas e xingamentos
+  'idiota', 'burro', 'babaca', 'imbecil', 'cretino', 'otario', 'otário',
+  'vagabundo', 'safado', 'desgraça', 'desgraca', 'lixo', 'merda',
+  // Termos sexuais inapropriados
+  'sexo', 'porn', 'xxx', 'nude', 'pelad',
+  // Drogas
+  'maconha', 'cocaina', 'crack', 'droga',
+  // Palavras em inglês comuns
+  'fuck', 'shit', 'bitch', 'ass', 'dick', 'cock', 'damn', 'hell',
+  // Admin/Teste (evitar confusão)
+  'admin', 'teste', 'test', 'null', 'undefined'
+];
+
+// Função auxiliar para verificar palavras inapropriadas
+const containsInappropriateWords = (name: string): boolean => {
+  const nameLower = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
+  
+  return INAPPROPRIATE_WORDS.some(word => {
+    // Verifica palavra exata ou como parte de outra palavra
+    const wordPattern = new RegExp(`\\b${word}\\b|${word}`, 'i');
+    return wordPattern.test(nameLower);
+  });
+};
+
 // Validação de nome
 export const validateName = (name: string): { isValid: boolean; error?: string } => {
   if (!name.trim()) {
@@ -18,8 +47,33 @@ export const validateName = (name: string): { isValid: boolean; error?: string }
     return { isValid: false, error: 'Nome deve conter apenas letras e espaços' };
   }
   
+  // ✅ VERIFICAR PALAVRAS INAPROPRIADAS
+  if (containsInappropriateWords(name)) {
+    return { isValid: false, error: 'Por favor, escolha um nome respeitoso' };
+  }
+  
   return { isValid: true };
 };
+
+// ✅ Lista de domínios de email válidos (provedores confiáveis)
+const VALID_EMAIL_DOMAINS = [
+  // Gmail
+  'gmail.com', 'googlemail.com',
+  // Microsoft
+  'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  // Yahoo
+  'yahoo.com', 'yahoo.com.br', 'ymail.com',
+  // Apple
+  'icloud.com', 'me.com', 'mac.com',
+  // Outros provedores populares
+  'protonmail.com', 'proton.me',
+  'aol.com',
+  'zoho.com',
+  // Provedores brasileiros
+  'uol.com.br', 'bol.com.br', 'terra.com.br',
+  // Educacionais
+  'edu', 'edu.br', 'ac.uk', 'edu.au'
+];
 
 // Validação de email
 export const validateEmail = (email: string): { isValid: boolean; error?: string } => {
@@ -27,8 +81,30 @@ export const validateEmail = (email: string): { isValid: boolean; error?: string
     return { isValid: false, error: 'E-mail é obrigatório' };
   }
   
+  // Validar formato básico
   if (!VALIDATION_RULES.EMAIL.PATTERN.test(email)) {
     return { isValid: false, error: 'E-mail inválido' };
+  }
+  
+  // ✅ VALIDAR DOMÍNIO (apenas provedores válidos)
+  const emailLower = email.toLowerCase();
+  const domain = emailLower.split('@')[1];
+  
+  if (!domain) {
+    return { isValid: false, error: 'E-mail inválido' };
+  }
+  
+  // Verificar se o domínio está na lista de válidos ou termina com domínio educacional
+  const isValidDomain = VALID_EMAIL_DOMAINS.some(validDomain => {
+    // Permitir domínio exato ou subdomínio (ex: mail.uol.com.br)
+    return domain === validDomain || domain.endsWith('.' + validDomain);
+  });
+  
+  if (!isValidDomain) {
+    return { 
+      isValid: false, 
+      error: 'Use um e-mail de provedor válido (Gmail, Outlook, Yahoo, etc.)' 
+    };
   }
   
   return { isValid: true };

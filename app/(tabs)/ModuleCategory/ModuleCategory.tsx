@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import TitleComponent from '../Components/Title/Title';
@@ -591,7 +591,14 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     }, [getCategoryLevel, getCategoryNameByLevel, isCategoryReallyCompleted, quizCompletionStatus, handlePressContentListCategory]);
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+        <>
+            <StatusBar 
+                barStyle="light-content" 
+                backgroundColor="#0087D3" 
+                translucent={false}
+                animated={true}
+            />
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
             <View style={styles.container}>
             <ScrollView>
                 {/* Barra Superior */}
@@ -872,6 +879,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
             </ScrollView>
             </View>
         </SafeAreaView>
+        </>
     );
 }
 

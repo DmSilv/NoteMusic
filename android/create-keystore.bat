@@ -1,0 +1,1 @@
+"C:\Program Files\Java\jdk-17\bin\keytool.exe" -genkey -v -keystore app/notemusic-release-key.keystore -alias notemusic-key-alias -keyalg RSA -keysize 2048 -validity 10000 -storepass notemusic123 -keypass notemusic123 -dname "CN=Daniel Silva, OU=Development, O=NoteMusic, L=SaoPaulo, S=SP, C=BR"

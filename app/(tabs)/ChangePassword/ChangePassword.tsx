@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, StatusBar } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import garota_sentada from '../../../assets/images/autenticacao.png';
@@ -100,7 +100,14 @@ export default function ChangePasswordScreen({ navigation, route }: ChangePasswo
   }, []);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+    <>
+      <StatusBar 
+        barStyle="light-content" 
+        backgroundColor="#0087D3" 
+        translucent={false}
+        animated={true}
+      />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -209,6 +216,7 @@ export default function ChangePasswordScreen({ navigation, route }: ChangePasswo
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </>
   );
 }
 

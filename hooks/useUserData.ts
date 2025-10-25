@@ -10,9 +10,9 @@ interface UserData {
 
 // Cache global para evitar múltiplas requisições
 const userDataCache = new Map<string, { data: UserData; timestamp: number }>();
-const CACHE_DURATION = 60000; // 1 minuto
+const CACHE_DURATION = 30000; // 30 segundos (reduzido para atualizações mais frequentes)
 
-export const useUserData = (refreshInterval: number = 300000) => { // Aumentado para 5 minutos
+export const useUserData = (refreshInterval: number = 60000) => { // Reduzido para 1 minuto
   const { user } = useAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,14 +82,14 @@ export const useUserData = (refreshInterval: number = 300000) => { // Aumentado 
     }
   }, [user]); // Removido loadUserData das dependências
 
-  // Atualizar dados periodicamente com backoff em caso de erro
+  // Atualizar dados periodicamente com backoff inteligente
   useEffect(() => {
     if (!user) return;
 
-    // Backoff exponencial mais agressivo para evitar erro 429
+    // Backoff mais inteligente: menos agressivo para evitar erro 429
     const baseInterval = refreshInterval;
-    const backoffMultiplier = Math.pow(2, retryCount); // 2x, 4x, 8x, 16x...
-    const backoffInterval = Math.min(baseInterval * backoffMultiplier, 1800000); // Max 30 minutos
+    const backoffMultiplier = Math.min(Math.pow(1.5, retryCount), 4); // Max 4x (menos agressivo)
+    const backoffInterval = Math.min(baseInterval * backoffMultiplier, 300000); // Max 5 minutos
 
     console.log(`⏰ Próxima atualização em ${Math.round(backoffInterval / 1000)}s (tentativa ${retryCount + 1})`);
 

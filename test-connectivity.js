@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 
 const testEndpoints = [
   'http://localhost:3333/api',
-  'http://192.168.1.8:3333/api',
+  'http://192.168.1.5:3333/api',
   'http://127.0.0.1:3333/api'
 ];
 
@@ -13,7 +13,7 @@ async function testConnectivity() {
   for (const endpoint of testEndpoints) {
     try {
       console.log(`📡 Testando: ${endpoint}`);
-      const response = await fetch(`${endpoint}/auth/basic-info`, {
+      const response = await fetch(`${endpoint}/health`, {
         method: 'GET',
         timeout: 5000
       });

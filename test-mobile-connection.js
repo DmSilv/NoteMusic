@@ -7,19 +7,19 @@ console.log('📱 TESTE DE CONEXÃO PARA CELULAR FÍSICO\n');
 const testScenarios = [
   {
     name: 'Teste 1: Rota básica do backend',
-    url: 'http://192.168.1.8:3333/api/auth/login',
+    url: 'http://192.168.1.5:3333/api/auth/login',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'test@test.com', password: '123456' })
   },
   {
     name: 'Teste 2: Verificar se backend responde',
-    url: 'http://192.168.1.8:3333/api',
+    url: 'http://192.168.1.5:3333/api',
     method: 'GET'
   },
   {
     name: 'Teste 3: Verificar CORS',
-    url: 'http://192.168.1.8:3333/api/auth/login',
+    url: 'http://192.168.1.5:3333/api/auth/login',
     method: 'OPTIONS'
   }
 ];
