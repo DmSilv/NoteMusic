@@ -24,7 +24,7 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
     navigation.navigate('RegisterUser');
   };
 
-  const getMarginBottom = (height: number): number => (height <= 720 ? height * 0.4 : height * 0.3);
+  const getMarginBottom = (height: number): number => (height <= 720 ? height * 0.35 : height * 0.25);
 
   const heightLogo = (height: number): number => (height <= 720 ? height * 0.25 : height * 0.2); // Retornar número
 
@@ -37,7 +37,7 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
   const getFormContainerMarginBottom = (height: number): string => (height <= 720 ? '50%' : '0%');
 
   const imageWidth = windowWidth * 1.2;
-  const containerModelHeight = 300;
+  const containerModelHeight = 320; // Aumentado para dar mais espaço
   const marginBottom = getMarginBottom(windowHeight);
   const heightLogoImage = heightLogo(windowHeight);
   const formContainerMarginBottom = getFormContainerMarginBottom(windowHeight);
@@ -119,7 +119,8 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 25,
+    marginTop: 35,
+    marginBottom: 35,
     width: '100%',
   },
 

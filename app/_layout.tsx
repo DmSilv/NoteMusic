@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from '../components/Notification/NotificationProvider';
 import SelectionScreen from './(tabs)/SelectionScreen/SelectionScreen';
 import LoginScreen from './(tabs)/LoginScreen/index';
 import RegisterUser from './(tabs)/RegisterUser/RegisterUser';
@@ -57,6 +58,7 @@ function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        <NotificationProvider>
         <NavigationContainer >
          
             <Stack.Navigator  
@@ -83,6 +85,7 @@ function App() {
             </Stack.Navigator>
          
         </NavigationContainer>
+        </NotificationProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -136,8 +136,11 @@ export default function LoginScreen({ navigation }: any) {
         Alert.alert('Bem-vindo!', 'Por favor, altere sua senha temporária.');
         navigation.navigate('ChangePassword');
       } else {
-        Alert.alert('Sucesso!', 'Login realizado com sucesso!');
-        navigation.navigate('ProfileHome');
+        // Login bem-sucedido - navegar SEM alert e SEM histórico
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'ProfileHome' }],
+        });
       }
     } catch (error: any) {
       console.error('Erro no login:', error);

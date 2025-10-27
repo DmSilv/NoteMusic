@@ -94,7 +94,7 @@ export const UserDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       current: 'Aprendiz',
       next: 'Virtuoso',
       percentage: 0,
-      requirements: 'Complete 2 módulos OU ganhe 200 pontos'
+      requirements: 'Complete 16 de 22 módulos Aprendiz (75%) para avançar'
     },
     weeklyProgressDetail: {
       current: 0,

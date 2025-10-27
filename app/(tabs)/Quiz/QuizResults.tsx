@@ -444,15 +444,15 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                     <View style={styles.detailCard}>
                         <View style={styles.detailRow}>
                             <View style={styles.detailItem}>
-                                <MaterialCommunityIcons name="trophy" size={18} color="#FF8C00" />
-                                <Text style={styles.detailLabel}>Pontuação Total</Text>
-                                <Text style={styles.detailValue}>{totalScore} pontos</Text>
-                            </View>
-                            
-                            <View style={styles.detailItem}>
                                 <MaterialCommunityIcons name="clock" size={18} color="#0087D3" />
                                 <Text style={styles.detailLabel}>Tempo Gasto</Text>
                                 <Text style={styles.detailValue}>{formatTime(timeSpent)}</Text>
+                            </View>
+                            
+                            <View style={styles.detailItem}>
+                                <MaterialCommunityIcons name="percent" size={18} color="#FF9800" />
+                                <Text style={styles.detailLabel}>Desempenho</Text>
+                                <Text style={styles.detailValue}>{percentage}%</Text>
                             </View>
                         </View>
                         
@@ -466,11 +466,9 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                             </View>
                             
                             <View style={styles.detailItem}>
-                                <MaterialCommunityIcons name="percent" size={18} color="#43A047" />
-                                <Text style={styles.detailLabel}>Taxa de Acerto</Text>
-                                <Text style={styles.detailValue}>
-                                    {totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0}%
-                                </Text>
+                                <MaterialCommunityIcons name="star" size={18} color="#FF8C00" />
+                                <Text style={styles.detailLabel}>Meta Necessária</Text>
+                                <Text style={styles.detailValue}>{requiredScore}%</Text>
                             </View>
                         </View>
                         
@@ -514,9 +512,6 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                                             />
                                         </View>
                                     </View>
-                                    <Text style={styles.answerPoints}>
-                                        +{answer.points} pontos
-                                    </Text>
                                 </View>
                             ))}
                         </View>
@@ -537,18 +532,18 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                                     </Text>
                                     <Text style={styles.dailyChallengeSubtext}>
                                         {percentage >= 70 
-                                            ? `Você conquistou ${totalScore} pontos bônus!`
+                                            ? `Você completou o desafio! Continue estudando para avançar de nível!`
                                             : 'Volte amanhã para um novo desafio!'}
                                     </Text>
                                 </View>
                             </View>
 
-                            {/* Informação sobre Pontos Ganhos */}
+                            {/* Informação sobre Próximo Desafio */}
                             {percentage >= 70 && (
                                 <View style={styles.dailyPointsInfo}>
-                                    <MaterialCommunityIcons name="star-circle" size={20} color="#FF8C00" />
+                                    <MaterialCommunityIcons name="calendar-clock" size={20} color="#FF8C00" />
                                     <Text style={styles.dailyPointsText}>
-                                        +{totalScore} pontos • Próximo desafio amanhã
+                                        ✅ Desafio concluído • Próximo desafio amanhã
                                     </Text>
                                 </View>
                             )}

@@ -13,6 +13,7 @@ import EditAccount from '../../../assets/images/Edit-Account.png';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../../contexts/AuthContext';
 import { validateEmail, validateName } from '../../../utils/validation';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 interface ModuleCategoryProps {
     navigation: StackNavigationProp<any>;
 }
@@ -365,9 +366,22 @@ interface ModuleCategoryProps {
                         disabled={isLoading || !hasChanges()}
                     />
                     
-                    <View style={styles.logoutContainer}>
+                    {/* Botões de Ação - Integrados ao formulário */}
+                    <View style={styles.actionsContainer}>
+                        {/* Botão Sair - Integrado */}
                         <TouchableOpacity 
-                            style={styles.deleteAccountButton}
+                            style={styles.actionButton}
+                            onPress={handleLogout}
+                            activeOpacity={0.7}
+                        >
+                            <MaterialCommunityIcons name="logout-variant" size={22} color="#666" />
+                            <Text style={styles.actionButtonText}>Sair da Conta</Text>
+                            <MaterialCommunityIcons name="chevron-right" size={22} color="#999" />
+                        </TouchableOpacity>
+
+                        {/* Botão Excluir - Integrado */}
+                        <TouchableOpacity 
+                            style={styles.actionButton}
                             onPress={() => {
                                 Alert.alert(
                                     'Excluir Conta',
@@ -382,13 +396,12 @@ interface ModuleCategoryProps {
                                     ]
                                 );
                             }}
+                            activeOpacity={0.7}
                         >
-                            <Text style={styles.deleteAccountButtonText}>Excluir Conta</Text>
+                            <MaterialCommunityIcons name="delete-outline" size={22} color="#DC3545" />
+                            <Text style={styles.actionDeleteText}>Excluir minha conta</Text>
+                            <MaterialCommunityIcons name="chevron-right" size={22} color="#DC3545" />
                         </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.logoutContainer}>
-                        <SecondaryButton onPress={handleLogout} styleWidth={{ width: windowWidth * 0.85 }} title={'Sair da Conta'} />
                     </View>
                 </View>
             </ScrollView>
@@ -448,10 +461,6 @@ const styles = StyleSheet.create({
         height: 270,
         resizeMode: 'contain',
     },
-    logoutContainer: {
-        marginTop: 20,
-        marginBottom: 20,
-    },
     infoContainer: {
         backgroundColor: '#F0F8FF',
         padding: 12,
@@ -466,26 +475,38 @@ const styles = StyleSheet.create({
         fontFamily: 'Roboto-Regular',
         textAlign: 'center',
     },
-    deleteAccountButton: {
-        backgroundColor: '#DC3545',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#C82333',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+    actionsContainer: {
+        marginTop: 20,
+        marginBottom: 20,
+        flexDirection: 'column',
+        gap: 12,
     },
-    deleteAccountButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-        letterSpacing: 0.5,
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    actionButtonText: {
+        flex: 1,
+        fontSize: 15,
+        color: '#232323',
+        fontWeight: '500',
+        marginLeft: 12,
+    },
+    actionDeleteText: {
+        flex: 1,
+        fontSize: 15,
+        color: '#DC3545',
+        fontWeight: '500',
+        marginLeft: 12,
     },
 });
 

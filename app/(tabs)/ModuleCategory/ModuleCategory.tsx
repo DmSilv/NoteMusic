@@ -59,14 +59,14 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         return () => clearTimeout(timeoutId);
     }, [searchQuery]);
     
-    // Definir nível inicial baseado no usuário
+    // Definir nível inicial baseado no usuário (primeira vez que carrega)
     useEffect(() => {
-        if (userStats && !selectedLevel) {
-            const userLevel = userStats.level || user?.level || 'aprendiz';
-            console.log(`🎯 Definindo nível inicial: ${userLevel}`);
-            setSelectedLevel(userLevel);
+        if (user && selectedLevel === '') {
+            const userLevel = user?.level || 'aprendiz';
+            console.log(`🎯 Definindo nível inicial do usuário: ${userLevel}`);
+            setSelectedLevel(userLevel.toLowerCase());
         }
-    }, [userStats, user, selectedLevel]);
+    }, [user, selectedLevel]);
 
     // Log quando selectedLevel muda e recarregar conclusão
     useEffect(() => {
@@ -100,7 +100,14 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     useEffect(() => {
         loadUserData();
         loadCategories();
-    }, []);
+        
+        // Definir nível inicial do usuário ao carregar
+        if (user?.level && selectedLevel === '') {
+            const userLevel = user.level.toLowerCase();
+            console.log(`🎯 Carregando tela com nível do usuário: ${userLevel}`);
+            setSelectedLevel(userLevel);
+        }
+    }, [user]);
 
     const loadUserData = async () => {
         try {

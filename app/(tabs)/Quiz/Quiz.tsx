@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, StatusBar, Animated, LayoutAnimation, Platform, UIManager, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import UserInfo from '../Components/UserInfo/Userinfo';
 import BackButton from '../Components/BackButton/BackButton';
@@ -110,6 +110,55 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     useEffect(() => {
         stateRef.current = state;
     }, [state]);
+
+    // ✅ Habilitar LayoutAnimation no Android
+    useEffect(() => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+            UIManager.setLayoutAnimationEnabledExperimental(true);
+        }
+    }, []);
+
+    // ✅ Bloquear botão voltar APENAS quando o quiz estiver carregado
+    useEffect(() => {
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+            // Bloquear se o quiz foi carregado (não está mais carregando)
+            const isQuizLoaded = !state.isLoading && state.quiz;
+            
+            if (isQuizLoaded) {
+                Alert.alert(
+                    '⚠️ Sair do Quiz?',
+                    'Ao sair, você perderá uma tentativa. Deseja continuar?',
+                    [
+                        {
+                            text: 'Continuar',
+                            style: 'cancel'
+                        },
+                        {
+                            text: 'Sair e Perder Tentativa',
+                            style: 'destructive',
+                            onPress: async () => {
+                                try {
+                                    // Registrar tentativa perdida
+                                    if (moduleId && moduleId !== 'daily-challenge-mock') {
+                                        await quizAttemptService.registerQuizAttempt(moduleId, moduleId, false);
+                                    }
+                                    navigation.goBack();
+                                } catch (error) {
+                                    console.error('Erro ao registrar tentativa perdida:', error);
+                                    navigation.goBack();
+                                }
+                            }
+                        }
+                    ]
+                );
+                return true; // Bloqueia o comportamento padrão
+            }
+            // Se ainda está carregando, permite voltar normalmente
+            return false;
+        });
+
+        return () => backHandler.remove();
+    }, [state.isLoading, state.quiz, navigation, moduleId]);
 
     // Questão atual
     const currentQuestion = state.quiz?.questions[state.currentQuestionIndex];
@@ -420,6 +469,13 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     });
                 }
                 
+                // ✅ Animar aparecimento do feedback
+                LayoutAnimation.configureNext({
+                    duration: 400,
+                    create: { type: 'easeOut', property: 'opacity', springDamping: 0.8 },
+                    update: { type: 'spring', springDamping: 0.6 },
+                });
+                
                 return {
                     ...prev,
                     showFeedback: true,
@@ -439,6 +495,13 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 isCorrect: false,
                 points: 0
             };
+
+            // ✅ Animar aparecimento do feedback
+            LayoutAnimation.configureNext({
+                duration: 400,
+                create: { type: 'easeOut', property: 'opacity', springDamping: 0.8 },
+                update: { type: 'spring', springDamping: 0.6 },
+            });
 
             setState(prev => ({
                 ...prev,
@@ -587,14 +650,38 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     }, [startTime, moduleId, navigation]);
 
     const handlePressProfileHome = () => {
-        Alert.alert(
-            'Sair do Quiz?',
-            'Tem certeza que deseja sair? Seu progresso será perdido.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Sair', onPress: () => navigation.goBack() }
-            ]
-        );
+        // Verificar se o quiz foi carregado
+        const isQuizLoaded = !state.isLoading && state.quiz;
+        
+        if (isQuizLoaded) {
+            // Quiz carregado: mostrar alerta de saída
+            Alert.alert(
+                '⚠️ Sair do Quiz?',
+                'Ao sair, você perderá uma tentativa. Deseja continuar?',
+                [
+                    { text: 'Continuar', style: 'cancel' },
+                    { 
+                        text: 'Sair e Perder Tentativa',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                // Registrar tentativa perdida
+                                if (moduleId && moduleId !== 'daily-challenge-mock') {
+                                    await quizAttemptService.registerQuizAttempt(moduleId, moduleId, false);
+                                }
+                                navigation.goBack();
+                            } catch (error) {
+                                console.error('Erro ao registrar tentativa perdida:', error);
+                                navigation.goBack();
+                            }
+                        }
+                    }
+                ]
+            );
+        } else {
+            // Se ainda está carregando, pode sair normalmente
+            navigation.goBack();
+        }
     };
 
     // Tela de carregamento
@@ -660,9 +747,21 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             </View>
 
             {/* Timer e Info do Quiz */}
-            <View style={styles.timerContainer}>
-                <Text style={styles.timerText}>⏱️ {formatTime(state.timeLeft)}</Text>
-                <Text style={[styles.scoreText, { color: levelColors.primary }]}>Pontos: {state.totalScore}</Text>
+            <View style={[
+                styles.timerContainer,
+                state.timeLeft <= 30 && styles.timerUrgent
+            ]}>
+                <Text style={[
+                    styles.timerText,
+                    state.timeLeft <= 30 && styles.timerUrgentText
+                ]}>
+                    ⏱️ {formatTime(state.timeLeft)}
+                </Text>
+                {state.timeLeft <= 30 && (
+                    <Text style={styles.timerWarning}>
+                        Tempo acabando!
+                    </Text>
+                )}
             </View>
 
             {/* Progress Bar */}
@@ -676,9 +775,6 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             </View>
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Category */}
-                <Text style={styles.categoryText}>{state.quiz.category}</Text>
-
                 {/* Question */}
                 <Text style={styles.question} key={`question_${state.currentQuestionIndex}`}>
                     {/* Adicionando key para forçar re-render quando muda a questão */}
@@ -733,9 +829,6 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                         ]}>
                             <Text style={styles.feedbackTitle}>
                                 {state.feedbackData.isCorrect ? '🎉 Correto!' : '❌ Incorreto'}
-                            </Text>
-                            <Text style={[styles.feedbackPoints, { color: levelColors.primary }]}>
-                                +{state.feedbackData.points} pontos
                             </Text>
                         </View>
                         
@@ -823,6 +916,21 @@ const styles = StyleSheet.create({
         color: '#E5944A',
         fontFamily: 'Roboto-Medium',
     },
+    timerUrgent: {
+        backgroundColor: '#FFEBEE',
+        borderLeftWidth: 4,
+        borderLeftColor: '#F44336',
+    },
+    timerUrgentText: {
+        color: '#F44336',
+    },
+    timerWarning: {
+        fontSize: Math.max(12, screenWidth * 0.03),
+        fontWeight: '600',
+        color: '#F44336',
+        fontFamily: 'Roboto-Bold',
+        marginLeft: 8,
+    },
     scoreText: {
         fontSize: Math.max(16, screenWidth * 0.04),
         fontWeight: '600',
@@ -862,13 +970,6 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-    },
-    categoryText: {
-        fontSize: Math.max(14, screenWidth * 0.035),
-        color: '#0A8CD6',
-        fontWeight: '600',
-        marginBottom: Math.max(8, screenHeight * 0.01),
-        fontFamily: 'Roboto-Medium',
     },
     question: {
         fontSize: Math.max(18, screenWidth * 0.045),

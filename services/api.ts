@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { validateModuleId, validateQuizId, getInvalidIdMessage } from '../utils/validation';
 
 // Configuração da API
-const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // ✅ PRODUÇÃO (Railway)
+// const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // ✅ PRODUÇÃO (Railway)
+// const API_BASE_URL = 'http://localhost:3333/api'; // Para iOS Simulator
+const API_BASE_URL = 'http://10.0.2.2:3333/api'; // ✅ Para Android Emulator (desenvolvimento)
 // const API_BASE_URL = 'http://192.168.1.5:3333/api'; // IP local da máquina (desenvolvimento)
-// const API_BASE_URL = 'http://10.0.2.2:3333/api'; // Para Android Emulator (desenvolvimento)
-// const API_BASE_URL = 'http://localhost:3333/api'; // Para iOS Simulator (desenvolvimento)
 
 // Tipos de dados
 export interface User {
@@ -48,6 +48,7 @@ export interface Module {
   content: string[];
   order: number;
   completedBy: string[];
+  quizTimeLimit?: number; // Tempo do quiz em segundos
 }
 
 export interface Quiz {
@@ -237,8 +238,17 @@ class ApiService {
       const data = await response.json();
       console.log('✅ Dados da resposta:', data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Erro na requisição ${endpoint}:`, error);
+      
+      // Melhor tratamento de erro de conexão
+      if (error.message?.includes('Network request failed') || 
+          error.message?.includes('Failed to connect') ||
+          error.message?.includes('ECONNREFUSED') ||
+          error.code === 'ECONNREFUSED') {
+        throw new Error('NETWORK_ERROR');
+      }
+      
       throw error;
     }
   }
@@ -278,7 +288,17 @@ class ApiService {
   }
 
   async logout(): Promise<void> {
-    await this.removeToken();
+    try {
+      // Chamar endpoint de logout no backend
+      await this.request('/auth/logout', {
+        method: 'POST'
+      });
+    } catch (error) {
+      console.error('Erro ao fazer logout no backend:', error);
+    } finally {
+      // Sempre remover token localmente
+      await this.removeToken();
+    }
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, StatusBar } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, StatusBar, Animated, BackHandler, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp } from '@react-navigation/native';
@@ -23,6 +23,13 @@ interface DailyChallengeStatus {
 const { width } = Dimensions.get('window');
 const CARD_MAX_WIDTH = 120;
 
+// Cores específicas para badge de nível na tela home (igual às coroas de categoria)
+const BADGE_COLORS: Record<string, string> = {
+  'Aprendiz': '#0087D3',  // Azul (cor da marca) - igual à coroa
+  'Virtuoso': '#2196F3',  // Azul médio
+  'Maestro': '#FF8C00',   // Laranja
+};
+
 function getGreeting(userStats: UserStats | any): string {
   const hour = new Date().getHours();
   const streak = userStats?.streak || 0;
@@ -34,9 +41,9 @@ function getGreeting(userStats: UserStats | any): string {
 
 function getLevelBadge(level: string): { color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap } {
   const levels: Record<string, { color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
-    'Aprendiz': { color: '#4CAF50', icon: 'school' },
-    'Virtuoso': { color: '#2196F3', icon: 'star' },
-    'Maestro': { color: '#FF8C00', icon: 'crown' },
+    'Aprendiz': { color: BADGE_COLORS['Aprendiz'], icon: 'school' }, // Azul #0087D3 (igual à coroa)
+    'Virtuoso': { color: BADGE_COLORS['Virtuoso'], icon: 'star' },
+    'Maestro': { color: BADGE_COLORS['Maestro'], icon: 'crown' },
   };
   return levels[level] || levels['Aprendiz'];
 }
@@ -70,27 +77,39 @@ function getStreakStatus(userStats: UserStats | null) {
   };
 }
 
-// ✅ FUNÇÃO PARA CALCULAR STATUS DOS PONTOS TOTAIS
-function getPointsStatus(userStats: UserStats | null) {
-  const totalPoints = userStats?.totalPoints || 0;
-  const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'star-circle';
+// ✅ FUNÇÃO PARA CALCULAR STATUS DOS MÓDULOS COMPLETOS (requisitos para avançar)
+function getModulesStatus(userStats: UserStats | null) {
+  const completedModules = userStats?.completedModules || 0;
+  const userLevel = userStats?.level?.toLowerCase() || 'aprendiz';
+  const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'book-check';
   
-  let description = 'Pontos acumulados';
+  // Definir REQUISITOS para avançar (não o total de módulos)
+  const requirementsByLevel: Record<string, number> = {
+    'aprendiz': 16,   // Precisa completar 16 para ser Virtuoso
+    'virtuoso': 32,   // Precisa completar 32 total para ser Maestro
+    'maestro': 42     // Já completou todos (42 módulos total)
+  };
   
-  if (totalPoints >= 1000) {
-    description = 'Excelente!';
-  } else if (totalPoints >= 500) {
+  const requiredModules = requirementsByLevel[userLevel] || 16;
+  
+  let description = 'Módulos completos';
+  
+  if (completedModules >= requiredModules) {
+    description = '🎉 Nível completo!';
+  } else if (completedModules >= requiredModules * 0.8) {
+    description = 'Quase lá!';
+  } else if (completedModules >= requiredModules * 0.5) {
     description = 'Muito bem!';
-  } else if (totalPoints >= 100) {
+  } else if (completedModules >= requiredModules * 0.25) {
     description = 'Progredindo';
-  } else if (totalPoints > 0) {
+  } else if (completedModules > 0) {
     description = 'Continue assim';
   } else {
-    description = 'Ganhe pontos';
+    description = 'Complete módulos';
   }
   
   return {
-    value: totalPoints.toString(),
+    value: `${completedModules}/${requiredModules}`,
     icon,
     description,
     color: '#0087D3'
@@ -129,7 +148,7 @@ interface ProfileHomeProps {
 }
 
 export default function ProfileHome({ navigation }: ProfileHomeProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [moduleProgress, setModuleProgress] = useState<any>(null);
@@ -140,11 +159,39 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     canPlay: true,
     timeRemaining: ''
   });
+  
+  // Animação sutil para o badge de nível
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    // Animação de pulse contínua
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    
+    pulse.start();
+    
+    return () => pulse.stop();
+  }, [pulseAnim]);
 
   useEffect(() => {
     loadUserData();
     loadDailyChallengeStatus();
   }, [user]); // Recarregar quando o usuário mudar
+
+  // ✅ BLOQUEIO DE SAIR DO APP: REMOVIDO para não interferir em outras telas
+  // O botão "Sair da Conta" na tela ProfileAccount é suficiente
 
   // Atualizar dados quando a tela receber foco (com throttling)
   useEffect(() => {
@@ -481,7 +528,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
   // ✅ CÁLCULOS INTELIGENTES PARA OS CARDS
   const streakStatus = getStreakStatus(userStats);
-  const pointsStatus = getPointsStatus(userStats);
+  const modulesStatus = getModulesStatus(userStats);
   const passRateStatus = getPassRateStatus(userStats);
 
   const stats = [
@@ -493,11 +540,11 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       color: streakStatus.color,
     },
     {
-      label: 'Pontos Totais',
-      value: pointsStatus.value,
-      icon: pointsStatus.icon,
-      description: pointsStatus.description,
-      color: pointsStatus.color,
+      label: 'Módulos Completos',
+      value: modulesStatus.value,
+      icon: modulesStatus.icon,
+      description: modulesStatus.description,
+      color: modulesStatus.color,
     },
     {
       label: 'Taxa de Sucesso',
@@ -514,14 +561,20 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Topo: Badge de nível, Saudação, Nome, Progresso */}
         <View style={styles.userHeader}>
-          <TouchableOpacity 
-            style={[styles.levelBadge, { backgroundColor: levelBadge.color }]}
-            onPress={() => navigation.navigate('LevelStats')}
-            activeOpacity={0.8}
-          > 
-            <MaterialCommunityIcons name={levelBadge.icon} size={22} color="#FFF" />
-            <Text style={styles.levelBadgeText}>{safeUserStats.level}</Text>
-          </TouchableOpacity>
+          <Animated.View
+            style={{
+              transform: [{ scale: pulseAnim }]
+            }}
+          >
+            <TouchableOpacity 
+              style={[styles.levelBadge, { backgroundColor: levelBadge.color }]}
+              onPress={() => navigation.navigate('LevelStats')}
+              activeOpacity={0.8}
+            > 
+              <MaterialCommunityIcons name={levelBadge.icon} size={22} color="#FFF" />
+              <Text style={styles.levelBadgeText}>{safeUserStats.level}</Text>
+            </TouchableOpacity>
+          </Animated.View>
           <View style={styles.userTextBlock}>
             <Text style={styles.greeting}>
               {greeting} <Text style={styles.username}>{user?.name || "Usuário"}</Text>
@@ -580,8 +633,8 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
               <Text style={styles.dailyChallengeInfoText}>5 questões</Text>
             </View>
             <View style={styles.dailyChallengeInfoItem}>
-              <MaterialCommunityIcons name="star-outline" size={16} color="#666" />
-              <Text style={styles.dailyChallengeInfoText}>+50 pontos</Text>
+              <MaterialCommunityIcons name="lightning-bolt" size={16} color="#666" />
+              <Text style={styles.dailyChallengeInfoText}>Desafio Único</Text>
             </View>
           </View>
           

@@ -5,13 +5,13 @@
 
 export const LevelColors = {
   aprendiz: {
-    primary: '#43BBFF',      // Azul claro - cor principal
+    primary: '#0087D3',      // Azul - cor principal (cor da marca)
     secondary: '#E8F4FD',    // Azul muito claro - fundo
     accent: '#C6E8FF',       // Azul médio - elementos secundários
-    text: '#1976D2',         // Azul escuro - texto
-    icon: '#43BBFF',         // Azul claro - ícones
-    border: '#43BBFF',       // Azul claro - bordas
-    shadow: '#43BBFF',       // Azul claro - sombras
+    text: '#0087D3',         // Azul escuro - texto
+    icon: '#0087D3',         // Azul claro - ícones
+    border: '#0087D3',       // Azul claro - bordas
+    shadow: '#0087D3',       // Azul claro - sombras
   },
   virtuoso: {
     primary: '#5A8BB8',      // Azul-prateado - cor principal

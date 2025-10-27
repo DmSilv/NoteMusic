@@ -104,7 +104,7 @@ const ERROR_MESSAGES: Record<string, ErrorMessage> = {
   // Erros de rede e servidor
   'NETWORK_ERROR': {
     title: 'Erro de Conexão',
-    message: 'Verifique sua conexão com a internet e tente novamente.',
+    message: 'Não foi possível conectar ao servidor. Verifique se o backend está rodando em localhost:3333',
     type: 'error'
   },
   'SERVER_ERROR': {

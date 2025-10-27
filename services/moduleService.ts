@@ -1,4 +1,5 @@
 import apiService, { Module } from './api';
+import { getCategoryDisplayName } from '../constants/CategoryNames';
 
 export interface ModuleProgress {
   moduleId: string;
@@ -84,7 +85,7 @@ class ModuleService {
     }, {} as Record<string, Module[]>);
     
     return Object.entries(modulesByCategory).map(([category, categoryModules]) => ({
-      name: category,
+      name: getCategoryDisplayName(category), // Converter slug para nome amigável
       modules: categoryModules
     }));
   }

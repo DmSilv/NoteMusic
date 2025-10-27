@@ -12,6 +12,7 @@ import moduleService from '../../../../services/moduleService';
 import quizService from '../../../../services/quizService';
 import { Module } from '../../../../services/api';
 import { formatLevelDisplay } from '../../../../constants/LevelColors';
+import { getCategoryDisplayName } from '../../../../constants/CategoryNames';
 
 interface QuizIntroScreenProps {
     navigation: StackNavigationProp<any>;
@@ -460,7 +461,14 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
             </View>
 
             <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-                <Text style={styles.pageTitle}>{moduleData?.title || quizTitle}</Text>
+                <View style={styles.intro}>
+                    <Text style={styles.pageTitle}>{moduleData?.title || quizTitle}</Text>
+                    {moduleData?.category && (
+                        <Text style={styles.pageSubtitle}>
+                            {getCategoryDisplayName(moduleData.category)}
+                        </Text>
+                    )}
+                </View>
 
                 {/* Informações do Quiz */}
                 <View style={styles.quizInfoContainer}>
@@ -480,6 +488,22 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                             Questões: {quizData?.totalQuestions || quizData?.questions?.length || '3'} perguntas
                         </Text>
                     </View>
+                    {!quizStatus.isOnCooldown && (
+                        <View style={styles.infoRow}>
+                            <MaterialCommunityIcons name="reload" size={16} color="#0087D3" />
+                            <Text style={styles.infoText}>
+                                Tentativas: <Text style={styles.attemptsHighlight}>{quizStatus.attempts.remaining}</Text> de {quizStatus.attempts.maxAttempts} disponíveis
+                            </Text>
+                        </View>
+                    )}
+                    {quizStatus.isOnCooldown && (
+                        <View style={styles.infoRow}>
+                            <MaterialCommunityIcons name="clock-outline" size={16} color="#FF9800" />
+                            <Text style={styles.infoText}>
+                                Cooldown: <Text style={styles.cooldownHighlight}>{quizStatus.timeRemaining}</Text> restantes
+                            </Text>
+                        </View>
+                    )}
                     {quizData?.passingScore && (
                         <View style={styles.infoRow}>
                             <MaterialCommunityIcons name="target" size={16} color="#0087D3" />
@@ -516,22 +540,13 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                 </View>
             )}
 
-            {/* Status do Quiz - Só aparece quando necessário */}
-            {(quizStatus.completed || quizStatus.isOnCooldown) && (
+            {/* Status do Quiz - apenas para quiz completado */}
+            {quizStatus.completed && (
                 <View style={styles.quizStatusContainer}>
-                    {quizStatus.completed ? (
-                        <View style={styles.statusItem}>
-                            <MaterialCommunityIcons name="check-circle" size={20} color="#43A047" />
-                            <Text style={styles.statusText}>✅ Quiz Concluído com Sucesso!</Text>
-                        </View>
-                    ) : quizStatus.isOnCooldown ? (
-                        <View style={styles.statusItem}>
-                            <MaterialCommunityIcons name="clock-outline" size={20} color="#FF9800" />
-                            <Text style={styles.statusText}>
-                                ⏰ Quiz bloqueado por {quizStatus.timeRemaining} minutos
-                            </Text>
-                        </View>
-                    ) : null}
+                    <View style={styles.statusItem}>
+                        <MaterialCommunityIcons name="check-circle" size={20} color="#43A047" />
+                        <Text style={styles.statusText}>✅ Quiz Concluído com Sucesso!</Text>
+                    </View>
                 </View>
             )}
 
@@ -568,11 +583,20 @@ const styles = StyleSheet.create({
         left: 20,
         zIndex: 10,
     },
+    intro: {
+        paddingVertical: 8,
+        marginBottom: 12,
+    },
     pageTitle: {
         fontSize: 24,
         fontWeight: 'bold',
         color: '#0087D3',
-        marginBottom: 15,
+        marginBottom: 4,
+    },
+    pageSubtitle: {
+        fontSize: 16,
+        color: '#999',
+        fontFamily: 'Roboto-Light',
     },
     sectionTitle: {
         fontSize: 18,
@@ -734,6 +758,16 @@ const styles = StyleSheet.create({
         color: '#0087D3',
         marginLeft: 8,
         fontWeight: '500',
+    },
+    attemptsHighlight: {
+        fontWeight: 'bold',
+        fontSize: 16,
+        color: '#43A047',
+    },
+    cooldownHighlight: {
+        fontWeight: 'bold',
+        fontSize: 16,
+        color: '#FF9800',
     },
     scrollContainer: {
         flex: 1,

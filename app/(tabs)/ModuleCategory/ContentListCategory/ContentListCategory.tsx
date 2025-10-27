@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform, StatusBar, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '../../Components/UserInfo/Userinfo';
 import BackButton from '../../Components/BackButton/BackButton';
+import SubTitleComponent from '../../Components/SubTitle/SubTitle';
+import TitleComponent from '../../Components/Title/Title';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getLevelColors, formatLevelDisplay } from '../../../../constants/LevelColors';
+import { getCategoryDisplayName } from '../../../../constants/CategoryNames';
 import moduleService from '../../../../services/moduleService';
 import { Module } from '../../../../services/api';
 import quizCompletionService from '../../../../services/quizCompletionService';
@@ -109,6 +112,20 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             
             if (categoryData?.modules) {
                 moduleList = categoryData.modules;
+                
+                // ✅ Buscar quizTimeLimit para cada módulo se não tiver
+                for (let i = 0; i < moduleList.length; i++) {
+                    if (!moduleList[i].quizTimeLimit) {
+                        try {
+                            const quiz = await quizService.getQuiz(moduleList[i].id);
+                            if (quiz && quiz.timeLimit) {
+                                moduleList[i].quizTimeLimit = quiz.timeLimit;
+                            }
+                        } catch (error) {
+                            console.log('⚠️ Quiz não encontrado para módulo:', moduleList[i].id);
+                        }
+                    }
+                }
             } else {
                 // Fallback: carregar todos os módulos
                  const allModules = await moduleService.getAllModules();
@@ -381,6 +398,8 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         const isOnCooldown = attemptStatusForModule?.attempts.cooldownUntil && cooldownTimer;
         const remainingAttempts = attemptStatusForModule?.attempts.remaining || 2;
         const hasStatus = !!attemptStatusForModule;
+        // ✅ Só mostrar badge de tentativas se NÃO estiver em cooldown
+        const shouldShowAttemptsBadge = hasStatus && !isQuizCompleted && !isLocked && !isOnCooldown;
         
         return (
             <View style={[
@@ -413,14 +432,50 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                     {item.description}
                 </Text>
                 <View style={styles.lessonFooter}>
-                    <View style={styles.timeContainer}>
-                        <View style={styles.containerModuleTime}>
-                            <Image
-                                source={require('../../../../assets/images/clock.png')}
-                                style={[styles.image, styles.clock]}
-                            />
+                    <View style={styles.lessonFooterLeft}>
+                        <View style={styles.timeContainer}>
+                            <View style={styles.containerModuleTime}>
+                                <Image
+                                    source={require('../../../../assets/images/clock.png')}
+                                    style={[styles.image, styles.clock]}
+                                />
+                            </View>
+                                            <Text style={styles.lessonTime}>
+                                {(() => {
+                                    // Calcular baseado no quiz se não tiver quizTimeLimit
+                                    const timeLimit = item.quizTimeLimit || (item.quiz?.timeLimit) || ((item.quizzes && item.quizzes[0]?.timeLimit)) || null;
+                                    return timeLimit ? `${Math.floor(timeLimit / 60)} min` : '5 min';
+                                })()}
+                            </Text>
                         </View>
-                        <Text style={styles.lessonTime}>5 min</Text>
+                        {shouldShowAttemptsBadge && (
+                            <View style={[
+                                styles.attemptsBadge,
+                                remainingAttempts === 0 && styles.attemptsBadgeWarning,
+                                remainingAttempts === 1 && styles.attemptsBadgeLast
+                            ]}>
+                                <MaterialCommunityIcons 
+                                    name={remainingAttempts === 0 ? "alert-circle" : "reload"} 
+                                    size={12} 
+                                    color={remainingAttempts === 0 ? "#F44336" : "#0087D3"} 
+                                />
+                                <Text style={[
+                                    styles.attemptsText,
+                                    remainingAttempts === 0 && styles.attemptsTextWarning,
+                                    remainingAttempts === 1 && styles.attemptsTextLast
+                                ]}>
+                                    {remainingAttempts}/{attemptStatusForModule?.attempts.maxAttempts || 2} tent.
+                                </Text>
+                            </View>
+                        )}
+                        {isOnCooldown && cooldownTimer && (
+                            <View style={styles.cooldownBadge}>
+                                <MaterialCommunityIcons name="clock-outline" size={12} color="#FF9800" />
+                                <Text style={styles.cooldownText}>
+                                    {cooldownTimer.minutes}:{cooldownTimer.seconds.toString().padStart(2, '0')}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                     {hasStatus && (!isOnCooldown && !isQuizCompleted) && (
                         <TouchableOpacity 
@@ -444,18 +499,14 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                         </TouchableOpacity>
                     )}
                     
-                    {/* Indicador visual de status - simplificado */}
-                    {hasStatus && (isOnCooldown || isQuizCompleted) && (
+                    {/* Indicador visual de status - apenas para quiz completado */}
+                    {hasStatus && isQuizCompleted && (
                         <View style={[
                             styles.statusIndicator,
-                            isOnCooldown ? { backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FF9800' } : { backgroundColor: '#E8F5E8', borderLeftWidth: 4, borderLeftColor: '#4CAF50' }
+                            { backgroundColor: '#E8F5E8', borderLeftWidth: 4, borderLeftColor: '#4CAF50' }
                         ]}>
-                            <Text style={[
-                                styles.statusIndicatorText,
-                                isOnCooldown ? { color: '#E65100' } : { color: '#4CAF50' }
-                            ]}>
-                                {isQuizCompleted ? 'Quiz concluído com sucesso' : 
-                                 `⏰ Bloqueado por ${cooldownTimer?.minutes}:${cooldownTimer?.seconds.toString().padStart(2, '0')}`}
+                            <Text style={[styles.statusIndicatorText, { color: '#4CAF50' }]}>
+                                ✅ Quiz concluído com sucesso
                             </Text>
                         </View>
                     )}
@@ -498,10 +549,23 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                 <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
             </View>
 
-            <Text style={[styles.pageTitle, { color: levelColors.primary }]}>{category?.name || "Módulos"}</Text>
-            <Text style={styles.pageSubtitle}>
-                {category?.modules?.length || modules?.length || 0} módulos disponíveis
-            </Text>
+            {/* Título e Informações da Categoria */}
+            <View style={styles.intro}>
+                <TitleComponent 
+                    title={getCategoryDisplayName(category?.name || "Módulos")} 
+                    fontFamily={'Roboto-Bold'} 
+                    color={''} 
+                    fontSize={''} 
+                    truncate={false} 
+                />
+                <SubTitleComponent 
+                    fontFamily={'Roboto-Light'} 
+                    subtitle={`${category?.modules?.length || modules?.length || 0} módulos disponíveis para estudo`} 
+                    color={''} 
+                    marginRight={''} 
+                    marginTop={4} 
+                />
+            </View>
 
             <FlatList
                 data={(modules || []).filter(Boolean)}
@@ -535,16 +599,10 @@ const styles = StyleSheet.create({
         left: 20,
         zIndex: 10,
     },
-    pageTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#0087D3',
-        marginBottom: 5,
-    },
-    pageSubtitle: {
-        fontSize: 16,
-        color: '#888',
-        marginBottom: 20,
+    intro: {
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        marginBottom: 8,
     },
     lessonContainer: {
         backgroundColor: '#F7FCFF',
@@ -593,6 +651,57 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    lessonFooterLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    attemptsBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E8F4FD',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
+    attemptsText: {
+        fontSize: 11,
+        color: '#0087D3',
+        fontWeight: '600',
+    },
+    attemptsBadgeWarning: {
+        backgroundColor: '#FFEBEE',
+        borderColor: '#F44336',
+        borderWidth: 1,
+    },
+    attemptsTextWarning: {
+        color: '#F44336',
+    },
+    attemptsBadgeLast: {
+        backgroundColor: '#FFF3E0',
+        borderColor: '#FF9800',
+        borderWidth: 1,
+    },
+    attemptsTextLast: {
+        color: '#FF9800',
+    },
+    cooldownBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF3E0',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+        borderWidth: 1,
+        borderColor: '#FF9800',
+    },
+    cooldownText: {
+        fontSize: 11,
+        color: '#FF9800',
+        fontWeight: '600',
     },
     actionContainer: {
         flexDirection: 'row',
