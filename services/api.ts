@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { validateModuleId, validateQuizId, getInvalidIdMessage } from '../utils/validation';
 
 // Configuração da API
-// const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // ✅ PRODUÇÃO (Railway)
+const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // ✅ PRODUÇÃO (Railway)
 // const API_BASE_URL = 'http://localhost:3333/api'; // Para iOS Simulator
-const API_BASE_URL = 'http://10.0.2.2:3333/api'; // ✅ Para Android Emulator (desenvolvimento)
+// const API_BASE_URL = 'http://10.0.2.2:3333/api'; // ✅ Para Android Emulator (desenvolvimento)
 // const API_BASE_URL = 'http://192.168.1.5:3333/api'; // IP local da máquina (desenvolvimento)
 
 // Tipos de dados
