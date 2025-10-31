@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, StatusBar, Animated, LayoutAnimation, Platform, UIManager, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '../Components/UserInfo/Userinfo';
 import BackButton from '../Components/BackButton/BackButton';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -83,6 +84,14 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         showCountdown: false
     });
     
+    // ✅ Referência para o intervalo do countdown
+    const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    
+    // ✅ Animações para o contador
+    const countdownOpacity = useRef(new Animated.Value(0)).current;
+    const countdownScale = useRef(new Animated.Value(0.8)).current;
+    const numberScale = useRef(new Animated.Value(1)).current;
+    
     // Estado centralizado do quiz
     const [state, setState] = useState<QuizState>(() => {
         const initialState = {
@@ -110,6 +119,72 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     useEffect(() => {
         stateRef.current = state;
     }, [state]);
+
+    // ✅ Cleanup do countdown quando o componente desmontar
+    useEffect(() => {
+        return () => {
+            if (countdownIntervalRef.current) {
+                clearInterval(countdownIntervalRef.current);
+                countdownIntervalRef.current = null;
+            }
+        };
+    }, []);
+
+    // ✅ Animação quando o countdown aparece/desaparece
+    useEffect(() => {
+        if (state.showCountdown && state.nextQuestionCountdown > 0) {
+            // Animar entrada suave
+            Animated.parallel([
+                Animated.spring(countdownOpacity, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                    tension: 50,
+                    friction: 7,
+                }),
+                Animated.spring(countdownScale, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                    tension: 50,
+                    friction: 7,
+                }),
+            ]).start();
+        } else {
+            // Animar saída suave
+            Animated.parallel([
+                Animated.timing(countdownOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(countdownScale, {
+                    toValue: 0.8,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }
+    }, [state.showCountdown, state.nextQuestionCountdown]);
+
+    // ✅ Animação do número quando muda
+    useEffect(() => {
+        if (state.showCountdown && state.nextQuestionCountdown > 0) {
+            // Pequeno pulse quando o número muda
+            Animated.sequence([
+                Animated.spring(numberScale, {
+                    toValue: 1.15,
+                    useNativeDriver: true,
+                    tension: 300,
+                    friction: 3,
+                }),
+                Animated.spring(numberScale, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                    tension: 300,
+                    friction: 3,
+                }),
+            ]).start();
+        }
+    }, [state.nextQuestionCountdown]);
 
     // ✅ Habilitar LayoutAnimation no Android
     useEffect(() => {
@@ -531,23 +606,40 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
 
     // ✅ Função para iniciar countdown visual
     const startCountdown = useCallback((seconds: number, callback: () => void) => {
-        setState(prev => ({
-            ...prev,
-            showCountdown: true,
-            nextQuestionCountdown: seconds
-        }));
+        console.log(`🔔 Iniciando countdown de ${seconds} segundos`);
+        
+        // ✅ Limpar qualquer intervalo anterior
+        if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+        }
+        
+        // ✅ Garantir que o estado inicial seja definido imediatamente
+        setState(prev => {
+            console.log(`🔔 Estado atualizado: showCountdown=true, nextQuestionCountdown=${seconds}`);
+            return {
+                ...prev,
+                showCountdown: true,
+                nextQuestionCountdown: seconds
+            };
+        });
 
         let remaining = seconds;
-        const countdownInterval = setInterval(() => {
+        countdownIntervalRef.current = setInterval(() => {
             remaining -= 1;
+            console.log(`🔔 Countdown: ${remaining}, showCountdown=true`);
             
             if (remaining > 0) {
                 setState(prev => ({
                     ...prev,
+                    showCountdown: true, // ✅ Garantir que continua true
                     nextQuestionCountdown: remaining
                 }));
             } else {
-                clearInterval(countdownInterval);
+                if (countdownIntervalRef.current) {
+                    clearInterval(countdownIntervalRef.current);
+                    countdownIntervalRef.current = null;
+                }
                 setState(prev => ({
                     ...prev,
                     showCountdown: false,
@@ -603,19 +695,36 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         
         // ✅ USAR PASSING SCORE DO QUIZ (flexível por nível)
         const requiredScore = currentState.quiz?.passingScore || 70;
-        const passed = percentage >= requiredScore;
-        console.log(`📊 Nota necessária: ${requiredScore}% | Obtida: ${percentage}% | Passou: ${passed}`);
+        
+        // ✅ AJUSTE PARA QUIZZES PEQUENOS: Mais justo para quizzes com poucas perguntas
+        // Se o quiz tem 3-4 perguntas e o usuário está muito perto da nota (diferença < 5%),
+        // considerar aprovado para evitar frustração
+        let adjustedRequiredScore = requiredScore;
+        if (totalQuestions <= 4 && percentage > 0) {
+            const exactPercentage = (correctAnswers / totalQuestions) * 100;
+            // Se está entre 65% e 70% (margem de tolerância), aprovar
+            if (exactPercentage >= 65 && exactPercentage < requiredScore && requiredScore === 70) {
+                adjustedRequiredScore = 65; // Aprovar com 65% em quizzes de 3-4 perguntas
+                console.log(`✅ Ajuste aplicado: Quiz pequeno (${totalQuestions} perguntas), aprovando com ${exactPercentage.toFixed(1)}% (margem de tolerância)`);
+            }
+        }
+        
+        const passed = percentage >= adjustedRequiredScore;
+        console.log(`📊 Nota necessária: ${adjustedRequiredScore}% | Obtida: ${percentage}% | Passou: ${passed}`);
         
         // Gerar feedback baseado no desempenho
         let performanceFeedback = '';
         if (percentage >= 90) {
             performanceFeedback = '🏆 Excelente! Você demonstrou domínio excepcional do conteúdo!';
-        } else if (percentage >= requiredScore) {
-            performanceFeedback = `⭐ Muito bom! Você atingiu a meta de ${requiredScore}%!`;
+        } else if (percentage >= adjustedRequiredScore) {
+            const scoreMessage = adjustedRequiredScore < requiredScore 
+                ? 'Você passou com uma margem de tolerância!' 
+                : `Você atingiu a meta de ${adjustedRequiredScore}%!`;
+            performanceFeedback = `⭐ Muito bom! ${scoreMessage}`;
         } else if (percentage >= 50) {
-            performanceFeedback = `📚 Bom esforço! Você precisa de ${requiredScore}% para passar.`;
+            performanceFeedback = `📚 Bom esforço! Você precisa de ${adjustedRequiredScore}% para passar.`;
         } else {
-            performanceFeedback = `💪 Continue estudando! Meta: ${requiredScore}%`;
+            performanceFeedback = `💪 Continue estudando! Meta: ${adjustedRequiredScore}%`;
         }
 
         // ✅ VERIFICAR SE É DESAFIO DIÁRIO E CHAMAR CALLBACK
@@ -642,7 +751,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 moduleId: moduleId,
                 isDailyChallenge,
                 passed,
-                requiredScore, // ✅ Nota mínima necessária
+                requiredScore: adjustedRequiredScore, // ✅ Nota mínima necessária (ajustada para quizzes pequenos)
                 quizLevel: currentState.quiz?.level || 'aprendiz', // ✅ Nível do quiz
                 fromQuiz: true
             });
@@ -751,16 +860,51 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 styles.timerContainer,
                 state.timeLeft <= 30 && styles.timerUrgent
             ]}>
-                <Text style={[
-                    styles.timerText,
-                    state.timeLeft <= 30 && styles.timerUrgentText
-                ]}>
-                    ⏱️ {formatTime(state.timeLeft)}
-                </Text>
-                {state.timeLeft <= 30 && (
-                    <Text style={styles.timerWarning}>
-                        Tempo acabando!
+                <View style={styles.timerLeftSide}>
+                    <MaterialCommunityIcons 
+                        name="timer-outline" 
+                        size={20} 
+                        color={state.timeLeft <= 30 ? '#F44336' : '#0087D3'} 
+                        style={styles.timerIcon}
+                    />
+                    <Text style={[
+                        styles.timerText,
+                        state.timeLeft <= 30 && styles.timerUrgentText
+                    ]}>
+                        {formatTime(state.timeLeft)}
                     </Text>
+                    {state.timeLeft <= 30 && (
+                        <Text style={styles.timerWarning}>
+                            Tempo acabando!
+                        </Text>
+                    )}
+                </View>
+                {/* ✨ COUNTDOWN VISUAL sutil no lado oposto */}
+                {state.showCountdown && state.nextQuestionCountdown > 0 && (
+                    <Animated.View 
+                        style={[
+                            styles.countdownInline,
+                            {
+                                opacity: countdownOpacity,
+                                transform: [{ scale: countdownScale }],
+                            }
+                        ]}
+                    >
+                        <Animated.View
+                            style={[
+                                styles.countdownNumberContainer,
+                                { 
+                                    backgroundColor: levelColors.primary + '20',
+                                    borderColor: levelColors.primary,
+                                    transform: [{ scale: numberScale }],
+                                }
+                            ]}
+                        >
+                            <Text style={[styles.countdownInlineNumber, { color: levelColors.primary }]}>
+                                {state.nextQuestionCountdown}
+                            </Text>
+                        </Animated.View>
+                    </Animated.View>
                 )}
             </View>
 
@@ -853,22 +997,6 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                         <Text style={styles.validatingText}>Validando resposta...</Text>
                     </View>
                 )}
-
-                {/* ✨ COUNTDOWN VISUAL para próxima questão */}
-                {state.showCountdown && state.nextQuestionCountdown > 0 && (
-                    <View style={styles.countdownContainer}>
-                        <View style={styles.countdownCircle}>
-                            <Text style={[styles.countdownNumber, { color: levelColors.primary }]}>
-                                {state.nextQuestionCountdown}
-                            </Text>
-                        </View>
-                        <Text style={styles.countdownText}>
-                            {state.currentQuestionIndex >= (state.quiz?.questions.length || 0) - 1
-                                ? 'Mostrando resultados em...'
-                                : 'Próxima questão em...'}
-                        </Text>
-                    </View>
-                )}
             </ScrollView>
             </View>
         </SafeAreaView>
@@ -910,10 +1038,18 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3,
     },
+    timerLeftSide: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    timerIcon: {
+        marginRight: 8,
+    },
     timerText: {
         fontSize: Math.max(16, screenWidth * 0.04),
         fontWeight: '600',
-        color: '#E5944A',
+        color: '#0087D3',
         fontFamily: 'Roboto-Medium',
     },
     timerUrgent: {
@@ -1115,43 +1251,33 @@ const styles = StyleSheet.create({
         color: '#666',
         fontFamily: 'Roboto-Regular',
     },
-    // ✨ Estilos para Countdown
-    countdownContainer: {
-        marginTop: 24,
-        padding: 20,
-        backgroundColor: '#F8F9FA',
-        borderRadius: 16,
+    // ✨ Estilos para Countdown Inline (sutil no container do cronômetro)
+    countdownInline: {
+        flexDirection: 'row',
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#C6E8FF',
+        justifyContent: 'flex-end',
+        minHeight: 28,
     },
-    countdownCircle: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#FFFFFF',
+    countdownNumberContainer: {
+        minWidth: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 2,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 12,
-        borderWidth: 3,
-        borderColor: '#0087D3',
-        elevation: 4,
-        shadowColor: '#000',
+        shadowColor: '#0087D3',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        elevation: 4,
     },
-    countdownNumber: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#0087D3',
+    countdownInlineNumber: {
+        fontSize: 18,
+        fontWeight: '700',
         fontFamily: 'Roboto-Bold',
-    },
-    countdownText: {
-        fontSize: 14,
-        color: '#545454',
-        fontFamily: 'Roboto-Medium',
         textAlign: 'center',
+        includeFontPadding: false,
+        textAlignVertical: 'center',
     },
 });
 
