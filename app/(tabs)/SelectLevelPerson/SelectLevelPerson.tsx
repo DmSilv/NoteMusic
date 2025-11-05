@@ -51,8 +51,7 @@ export default function SelectLevelPerson({ navigation }) {
   const handleNext = () => {
     if (step < steps.length - 1) setStep(step + 1);
     else {
-      // Salvar perfil, dar feedback e navegar para Home
-      alert('Parabéns! Você já ganhou seu primeiro troféu: “Primeiro Passo” 🏅');
+      // Salvar perfil e navegar para Home
       navigation.replace('ProfileHome');
     }
   };

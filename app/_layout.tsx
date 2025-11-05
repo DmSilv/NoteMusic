@@ -81,6 +81,8 @@ function App() {
               <Stack.Screen name="QuizIntroScreen" component={QuizIntroScreen} options={{ headerShown: false }} />
               <Stack.Screen name="ChangePassword" component={ChangePassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
               <Stack.Screen name="LevelStats" component={LevelStats} options={{ headerShown: false }} />
+              <Stack.Screen name="AccountDeletion" component={AccountDeletion} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
+              <Stack.Screen name="DeactivatedAccount" component={DeactivatedAccount} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
 
             </Stack.Navigator>
          

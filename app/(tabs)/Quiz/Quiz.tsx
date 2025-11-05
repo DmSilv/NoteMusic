@@ -235,6 +235,23 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         return () => backHandler.remove();
     }, [state.isLoading, state.quiz, navigation, moduleId]);
 
+    // ✅ VALIDAÇÃO DE SEGURANÇA: Garantir que o índice está dentro dos limites
+    useEffect(() => {
+        if (state.quiz && state.quiz.questions) {
+            const totalQuestions = state.quiz.questions.length;
+            const isValidIndex = state.currentQuestionIndex >= 0 && state.currentQuestionIndex < totalQuestions;
+            
+            // Se o índice for inválido, resetar para a primeira questão
+            if (!isValidIndex && totalQuestions > 0) {
+                console.warn(`⚠️ Índice de questão inválido (${state.currentQuestionIndex}/${totalQuestions}) - resetando para 0`);
+                setState(prev => ({
+                    ...prev,
+                    currentQuestionIndex: 0
+                }));
+            }
+        }
+    }, [state.quiz, state.currentQuestionIndex]);
+
     // Questão atual
     const currentQuestion = state.quiz?.questions[state.currentQuestionIndex];
 
@@ -492,6 +509,18 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         }));
 
         try {
+            // ✅ VALIDAÇÃO DE SEGURANÇA: Verificar se o índice está dentro dos limites
+            const maxIndex = (state.quiz?.questions.length || 0) - 1;
+            if (state.currentQuestionIndex < 0 || state.currentQuestionIndex > maxIndex) {
+                console.error(`❌ Índice de questão inválido: ${state.currentQuestionIndex} (max: ${maxIndex})`);
+                Alert.alert(
+                    'Erro',
+                    `Erro ao validar questão. Por favor, recarregue o quiz.`,
+                    [{ text: 'OK' }]
+                );
+                return;
+            }
+
             // 🔍 Validar resposta no backend
             const validation = await quizService.validateQuestion(
                 state.quiz!.id,
@@ -650,31 +679,44 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         }, 1000);
     }, []);
 
-    // ✅ Função otimizada para avançar para próxima questão
+    // ✅ Função otimizada para avançar para próxima questão (COM VALIDAÇÃO DE SEGURANÇA)
     const proceedToNextQuestion = useCallback(() => {
         setState(prev => {
-            const isLastQuestion = prev.currentQuestionIndex >= (prev.quiz?.questions.length || 0) - 1;
+            const totalQuestions = prev.quiz?.questions.length || 0;
+            const maxIndex = totalQuestions - 1;
+            const isLastQuestion = prev.currentQuestionIndex >= maxIndex;
             
-            if (isLastQuestion) {
-                console.log('⚠️ proceedToNextQuestion chamado para última questão - finalizando quiz');
-                // Se for a última questão, finalizar o quiz em vez de tentar avançar
+            // ✅ VALIDAÇÃO DE SEGURANÇA: Evitar avançar além do limite
+            if (isLastQuestion || prev.currentQuestionIndex >= totalQuestions) {
+                console.log(`⚠️ proceedToNextQuestion chamado para última questão (${prev.currentQuestionIndex + 1}/${totalQuestions}) - finalizando quiz`);
+                // Se for a última questão ou já passou do limite, finalizar o quiz
                 setTimeout(() => {
                     finishQuiz();
                 }, 300);
                 return prev;
-            } else {
-                console.log('✅ Avançando para próxima questão');
-                return {
-                    ...prev,
-                    currentQuestionIndex: prev.currentQuestionIndex + 1,
-                    selectedOption: null,
-                    showFeedback: false,
-                    feedbackData: null,
-                    isAnswering: false,
-                    showCountdown: false,
-                    nextQuestionCountdown: 0
-                };
             }
+            
+            // ✅ VALIDAÇÃO: Garantir que o próximo índice seja válido
+            const nextIndex = prev.currentQuestionIndex + 1;
+            if (nextIndex >= totalQuestions) {
+                console.log(`⚠️ Próximo índice ${nextIndex} excede o total de questões ${totalQuestions} - finalizando quiz`);
+                setTimeout(() => {
+                    finishQuiz();
+                }, 300);
+                return prev;
+            }
+            
+            console.log(`✅ Avançando para próxima questão: ${nextIndex + 1}/${totalQuestions}`);
+            return {
+                ...prev,
+                currentQuestionIndex: nextIndex,
+                selectedOption: null,
+                showFeedback: false,
+                feedbackData: null,
+                isAnswering: false,
+                showCountdown: false,
+                nextQuestionCountdown: 0
+            };
         });
     }, [finishQuiz]);
 

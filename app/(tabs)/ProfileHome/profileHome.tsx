@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, StatusBar, Animated, BackHandler, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, StatusBar, Animated, BackHandler, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import apiService from '../../../services/api';
 import moduleService from '../../../services/moduleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats } from '../../../types/UserStats';
+import { getLevelColors } from '../../../constants/LevelColors';
 
 // ✅ INTERFACE PARA CONTROLE DE DESAFIO DIÁRIO
 interface DailyChallengeStatus {
@@ -23,13 +24,6 @@ interface DailyChallengeStatus {
 const { width } = Dimensions.get('window');
 const CARD_MAX_WIDTH = 120;
 
-// Cores específicas para badge de nível na tela home (igual às coroas de categoria)
-const BADGE_COLORS: Record<string, string> = {
-  'Aprendiz': '#0087D3',  // Azul (cor da marca) - igual à coroa
-  'Virtuoso': '#2196F3',  // Azul médio
-  'Maestro': '#FF8C00',   // Laranja
-};
-
 function getGreeting(userStats: UserStats | any): string {
   const hour = new Date().getHours();
   const streak = userStats?.streak || 0;
@@ -40,12 +34,12 @@ function getGreeting(userStats: UserStats | any): string {
 }
 
 function getLevelBadge(level: string): { color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap } {
-  const levels: Record<string, { color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
-    'Aprendiz': { color: BADGE_COLORS['Aprendiz'], icon: 'school' }, // Azul #0087D3 (igual à coroa)
-    'Virtuoso': { color: BADGE_COLORS['Virtuoso'], icon: 'star' },
-    'Maestro': { color: BADGE_COLORS['Maestro'], icon: 'crown' },
+  // ✅ Usar getLevelColors para manter consistência com a tela de categorias
+  const levelColors = getLevelColors(level);
+  return {
+    color: levelColors.primary,
+    icon: 'school' // Todos os níveis usam o ícone de estudante (chapéu de formatura)
   };
-  return levels[level] || levels['Aprendiz'];
 }
 
 // ✅ FUNÇÃO PARA CALCULAR STATUS DA SEQUÊNCIA (STREAK)
@@ -190,19 +184,104 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     loadDailyChallengeStatus();
   }, [user]); // Recarregar quando o usuário mudar
 
-  // ✅ BLOQUEIO DE SAIR DO APP: REMOVIDO para não interferir em outras telas
-  // O botão "Sair da Conta" na tela ProfileAccount é suficiente
+  // ✅ Estado para rastrear se a tela está focada
+  const [isScreenFocused, setIsScreenFocused] = useState(false);
 
-  // Atualizar dados quando a tela receber foco (com throttling)
+  // ✅ Listener para rastrear quando a tela recebe/perde foco
+  useEffect(() => {
+    setIsScreenFocused(true); // Assume focado ao montar
+    
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      setIsScreenFocused(true);
+      
+      // ✅ Limpar stack de navegação quando a tela recebe foco
+      // Isso remove todas as telas anteriores da memória e evita voltar para elas
+      try {
+        const navigationState = navigation.getState();
+        const currentRoute = navigationState?.routes?.[navigationState.index];
+        
+        // Se a tela atual é ProfileHome e há telas anteriores na stack, limpar
+        if (currentRoute?.name === 'ProfileHome' && navigationState.routes.length > 1) {
+          console.log('🧹 Limpando stack de navegação - removendo telas anteriores da memória');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'ProfileHome' }],
+          });
+        }
+      } catch (error) {
+        // Se houver erro ao acessar o estado, não fazer nada (não quebrar o app)
+        console.log('⚠️ Não foi possível limpar stack:', error);
+      }
+    });
+    
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setIsScreenFocused(false);
+    });
+
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [navigation]);
+
+  // ✅ BackHandler na tela Home - Avisar antes de sair do app APENAS quando focada e sem histórico
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // ✅ Se a tela não está focada, permite navegação padrão (outra tela vai tratar)
+      if (!isScreenFocused) {
+        return false; // Permite navegação padrão
+      }
+      
+      // ✅ Verificar se há telas anteriores no histórico
+      // Se houver histórico, permite voltar normalmente
+      try {
+        const canGoBack = navigation.canGoBack();
+        if (canGoBack) {
+          return false; // Permite navegação padrão (voltar para tela anterior)
+        }
+      } catch (error) {
+        // Se não conseguir verificar, assume que pode voltar (seguro)
+        return false;
+      }
+      
+      // ✅ Só pergunta se quer sair quando está na Home focada e não há mais para onde voltar
+      Alert.alert(
+        'Sair do NoteMusic?',
+        'Deseja realmente sair do aplicativo?',
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+            onPress: () => null
+          },
+          {
+            text: 'Sair',
+            style: 'destructive',
+            onPress: () => BackHandler.exitApp()
+          }
+        ],
+        { cancelable: true }
+      );
+      return true; // Previne comportamento padrão (sair imediatamente)
+    });
+
+    return () => backHandler.remove();
+  }, [navigation, isScreenFocused]);
+
+  // Atualizar dados quando a tela receber foco (com throttling reduzido para sincronização)
   useEffect(() => {
     let lastFocusTime = 0;
-    const FOCUS_THROTTLE = 30000; // 30 segundos
+    const FOCUS_THROTTLE = 5000; // Reduzido para 5 segundos para melhor sincronização
 
-    const unsubscribe = navigation.addListener('focus', () => {
+    const unsubscribe = navigation.addListener('focus', (e) => {
       const now = Date.now();
-      if (now - lastFocusTime > FOCUS_THROTTLE) {
-        console.log('🔄 Tela inicial recebeu foco, atualizando dados...');
-        loadUserData();
+      // ✅ Verificar se há parâmetro forceRefresh para forçar atualização
+      const routeParams = navigation.getState()?.routes?.find(r => r.name === 'ProfileHome')?.params;
+      const forceRefresh = routeParams?.forceRefresh;
+      
+      if (forceRefresh || (now - lastFocusTime > FOCUS_THROTTLE)) {
+        console.log('🔄 Tela inicial recebeu foco, atualizando dados...', forceRefresh ? '(forçado)' : '');
+        loadUserData(); // Isso recarrega as estatísticas do backend
         loadDailyChallengeStatus();
         lastFocusTime = now;
       } else {
@@ -525,6 +604,9 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
   const levelBadge = getLevelBadge(safeUserStats.level);
   const greeting = getGreeting(safeUserStats);
+  
+  // ✅ Obter cores do nível atual para aplicar no header e elementos
+  const currentLevelColors = getLevelColors(safeUserStats.level);
 
   // ✅ CÁLCULOS INTELIGENTES PARA OS CARDS
   const streakStatus = getStreakStatus(userStats);
@@ -556,9 +638,18 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
-      <StatusBar barStyle="light-content" backgroundColor="#0087D3" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: currentLevelColors.primary }}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: currentLevelColors.primary }}>
+        <StatusBar barStyle="light-content" backgroundColor={currentLevelColors.primary} />
+      </SafeAreaView>
+      <ScrollView 
+        style={{ flex: 1, backgroundColor: '#F8F9FA' }}
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: Platform.OS === 'android' ? 120 : 100 } // ✅ Margin bottom responsivo maior para Samsung/Android
+        ]} 
+        showsVerticalScrollIndicator={false}
+      >
         {/* Topo: Badge de nível, Saudação, Nome, Progresso */}
         <View style={styles.userHeader}>
           <Animated.View
@@ -576,7 +667,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             </TouchableOpacity>
           </Animated.View>
           <View style={styles.userTextBlock}>
-            <Text style={styles.greeting}>
+            <Text style={[styles.greeting, { color: currentLevelColors.primary }]}>
               {greeting} <Text style={styles.username}>{user?.name || "Usuário"}</Text>
             </Text>
           </View>
@@ -675,12 +766,14 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
         {/* ✅ SEÇÃO "STATUS DA JORNADA" REMOVIDA CONFORME SOLICITADO */}
       </ScrollView>
-      <MenuBottom
-        current="home"
-        goHome={() => {}}
-        goProfile={() => navigation && navigation.navigate ? navigation.navigate('ProfileAccount') : null}
-      />
-    </SafeAreaView>
+      <View style={{ backgroundColor: '#F8F9FA' }}>
+        <MenuBottom
+          current="home"
+          goHome={() => {}}
+          goProfile={() => navigation && navigation.navigate ? navigation.navigate('ProfileAccount') : null}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -722,7 +815,6 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 18,
-    color: '#0087D3',
     fontWeight: '600',
     marginBottom: 0,
   },

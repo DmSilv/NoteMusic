@@ -64,23 +64,11 @@ export const getLevelColors = (level: string) => {
 };
 
 // Função helper para obter ícone baseado no nível
+// ✅ Todos os níveis usam o ícone de estudante (chapéu de formatura) com cores diferentes
 export const getLevelIcon = (level: string): string => {
-  const normalizedLevel = level?.toLowerCase() || 'aprendiz';
-  
-  switch (normalizedLevel) {
-    case 'aprendiz':
-      return 'school';
-    case 'virtuoso':
-      return 'star';
-    case 'maestro':
-      return 'crown';
-    case 'nível máximo':
-    case 'nivel maximo':
-    case 'maximo':
-      return 'trophy';
-    default:
-      return 'school';
-  }
+  // Retorna 'school' (chapéu de estudante) para todos os níveis
+  // A cor é definida pela função getLevelColors
+  return 'school';
 };
 
 // Função helper para obter cor da coroa baseada no nível (compatibilidade com código existente)

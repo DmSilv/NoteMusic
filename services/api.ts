@@ -1,11 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { validateModuleId, validateQuizId, getInvalidIdMessage } from '../utils/validation';
 
 // Configuração da API
-const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // ✅ PRODUÇÃO (Railway)
-// const API_BASE_URL = 'http://localhost:3333/api'; // Para iOS Simulator
-// const API_BASE_URL = 'http://10.0.2.2:3333/api'; // ✅ Para Android Emulator (desenvolvimento)
-// const API_BASE_URL = 'http://192.168.1.5:3333/api'; // IP local da máquina (desenvolvimento)
+// ✅ DESENVOLVIMENTO LOCAL - Usando backend local quando em modo __DEV__
+// const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // PRODUÇÃO (Railway)
+
+// Detecção automática para desenvolvimento local
+const API_BASE_URL = __DEV__ ? (
+  Platform.OS === 'ios' 
+    ? 'http://localhost:3333/api' // ✅ iOS Simulator
+    : 'http://10.0.2.2:3333/api'  // ✅ Android Emulator (10.0.2.2 é o IP do host no emulador)
+) : 'https://notemusic-backend-production.up.railway.app/api'; // PRODUÇÃO
+
+// Para dispositivo físico Android na mesma rede Wi-Fi, use:
+// const API_BASE_URL = 'http://192.168.1.X:3333/api'; // Substitua X pelo IP da sua máquina
 
 // Tipos de dados
 export interface User {
@@ -232,7 +241,12 @@ class ApiService {
         const errorMessage = errorData.message || `HTTP error! status: ${response.status}`;
         console.error(`❌ Erro na requisição ${endpoint}:`, errorMessage);
         console.error('❌ Dados do erro:', errorData);
-        throw new Error(errorMessage);
+        
+        // ✅ Criar erro com status code para tratamento adequado
+        const error: any = new Error(errorMessage);
+        error.status = response.status;
+        error.response = { status: response.status, data: errorData };
+        throw error;
       }
 
       const data = await response.json();

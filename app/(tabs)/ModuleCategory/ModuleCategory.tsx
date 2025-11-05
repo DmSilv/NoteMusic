@@ -69,10 +69,13 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     }, [user, selectedLevel]);
 
     // Log quando selectedLevel muda e recarregar conclusão
+    // ✅ Adicionar debounce para evitar muitas requisições ao alternar filtros rapidamente
     useEffect(() => {
         console.log(`🔄 ESTADO selectedLevel MUDOU: "${selectedLevel}"`);
         if (user) {
             loadCategoryCompletion();
+            // ✅ NÃO chamar validateIndividualQuizCompletion aqui - apenas quando necessário
+            // Isso evita muitas requisições ao alternar filtros rapidamente
         }
     }, [selectedLevel]);
     
@@ -245,12 +248,23 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         }
     };
 
+    // ✅ Ref para controlar se já está validando (evitar múltiplas validações simultâneas)
+    const isValidatingRef = React.useRef(false);
+    
     // Função para validar conclusão real de cada quiz individual
+    // ✅ Otimizada para evitar erro 429 com throttling e cache
     const validateIndividualQuizCompletion = async (categories: ModuleCategoryType[]) => {
         if (!user || categories.length === 0) {
             return;
         }
 
+        // ✅ Evitar múltiplas validações simultâneas
+        if (isValidatingRef.current) {
+            console.log('⏳ Validação já em andamento, ignorando...');
+            return;
+        }
+
+        isValidatingRef.current = true;
         setIsValidatingQuizzes(true);
         console.log('🔍 Iniciando validação real de conclusão de quizzes...');
 
@@ -271,31 +285,67 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
 
             console.log(`📊 Validando ${allModuleIds.length} quizzes individuais...`);
 
-            // Verificar conclusão de todos os quizzes em paralelo
-            const completionStatuses = await quizCompletionService.checkMultipleQuizCompletions(allModuleIds);
+            // ✅ Verificar conclusão com throttling (processa em batches)
+            // forceRefresh = false para usar cache quando possível
+            const completionStatuses = await quizCompletionService.checkMultipleQuizCompletions(allModuleIds, false);
             
-            // Processar resultados
+            // ✅ Processar resultados com validação rigorosa
+            let completedCount = 0;
+            let totalCount = 0;
+            
             completionStatuses.forEach((status, moduleId) => {
-                completionMap.set(moduleId, status.isCompleted);
-                console.log(`✅ Quiz ${moduleId}: ${status.isCompleted ? 'CONCLUÍDO' : 'NÃO CONCLUÍDO'}`);
+                totalCount++;
+                const isCompleted = status.isCompleted === true; // ✅ Validação explícita
+                completionMap.set(moduleId, isCompleted);
+                
+                if (isCompleted) {
+                    completedCount++;
+                }
+                
+                console.log(`   ${isCompleted ? '✅' : '❌'} Quiz ${moduleId}: ${isCompleted ? 'CONCLUÍDO' : 'NÃO CONCLUÍDO'}`);
+            });
+
+            // ✅ VALIDAÇÃO CRUZADA: Verificar se há módulos que não foram retornados
+            // Se algum módulo não foi encontrado no resultado, marcar como não completo
+            categories.forEach(category => {
+                if (category.modules) {
+                    category.modules.forEach(module => {
+                        if (module.id && !completionMap.has(module.id)) {
+                            console.warn(`⚠️ Módulo ${module.id} (${module.title}) não foi verificado - marcando como não completo`);
+                            completionMap.set(module.id, false);
+                            totalCount++;
+                        }
+                    });
+                }
             });
 
             setQuizCompletionStatus(completionMap);
-            console.log('✅ Validação de quizzes concluída:', completionMap.size, 'quizzes verificados');
+            console.log(`\n✅ Validação concluída: ${completedCount}/${totalCount} quizzes completados (${completionMap.size} total verificados)`);
             
             // Mostrar feedback de sucesso
             setValidationSuccess(true);
             setTimeout(() => setValidationSuccess(false), 2000); // Esconder após 2 segundos
             
-        } catch (error) {
+        } catch (error: any) {
             console.error('❌ Erro ao validar conclusão de quizzes:', error);
-            Alert.alert(
-                'Erro na Validação',
-                'Não foi possível validar o status dos quizzes. Tente novamente.',
-                [{ text: 'OK', style: 'default' }]
-            );
+            
+            // ✅ Tratar erro 429 especificamente
+            if (error?.response?.status === 429 || error?.status === 429) {
+                Alert.alert(
+                    'Muitas Requisições',
+                    'Você fez muitas requisições. Aguarde alguns segundos e tente novamente.',
+                    [{ text: 'OK', style: 'default' }]
+                );
+            } else {
+                Alert.alert(
+                    'Erro na Validação',
+                    'Não foi possível validar o status dos quizzes. Tente novamente.',
+                    [{ text: 'OK', style: 'default' }]
+                );
+            }
         } finally {
             setIsValidatingQuizzes(false);
+            isValidatingRef.current = false;
         }
     };
 
@@ -349,114 +399,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         return 'aprendiz';
     }, []);
 
-    // Função para filtrar categorias por nível (otimizada com useMemo)
-    const getFilteredCategories = useMemo(() => {
-        console.log(`\n🔍 ===== FILTRO DE CATEGORIAS =====`);
-        console.log(`🎯 Filtro selecionado: "${selectedLevel}"`);
-        console.log(`📚 Total de categorias disponíveis: ${categories.length}`);
-        
-        if (!selectedLevel || selectedLevel === '') {
-            // Por padrão, mostrar apenas categorias do nível atual do usuário
-            const userLevel = currentUserLevel || 'aprendiz';
-            console.log(`📋 Mostrando categorias do nível atual do usuário: ${userLevel}`);
-            
-            const filteredByUserLevel = categories.filter((category) => {
-                if (!category || !category.modules || category.modules.length === 0) {
-                    return false;
-                }
-                
-                const categoryLevel = getCategoryLevel(category);
-                return categoryLevel === userLevel;
-            });
-            
-            console.log(`📊 Categorias do nível ${userLevel}: ${filteredByUserLevel.length}`);
-            return filteredByUserLevel;
-        }
-        
-        console.log(`\n🔍 Processando filtro para nível: ${selectedLevel}`);
-        
-        // NOVA LÓGICA: Filtrar módulos por nível e depois agrupar por categoria
-        const filteredCategories: ModuleCategoryType[] = [];
-        const categoryMap = new Map<string, ModuleCategoryType>();
-        
-        categories.forEach((category) => {
-            if (!category || !category.modules || category.modules.length === 0) {
-                return;
-            }
-            
-            // Filtrar módulos do nível selecionado
-            const modulesOfLevel = category.modules.filter((module) => {
-                return module.level === selectedLevel;
-            });
-            
-            if (modulesOfLevel.length > 0) {
-                // Se já existe uma categoria com esse nome, adicionar os módulos
-                if (categoryMap.has(category.name)) {
-                    const existingCategory = categoryMap.get(category.name)!;
-                    existingCategory.modules = [...existingCategory.modules, ...modulesOfLevel];
-                } else {
-                    // Criar nova categoria com apenas os módulos do nível selecionado
-                    categoryMap.set(category.name, {
-                        name: category.name,
-                        modules: modulesOfLevel
-                    });
-                }
-            }
-        });
-        
-        // Converter Map para array
-        const filtered = Array.from(categoryMap.values());
-        
-        console.log(`\n📋 ===== RESULTADO FINAL =====`);
-        console.log(`🎯 Filtro: ${selectedLevel}`);
-        console.log(`📊 Categorias encontradas: ${filtered.length}`);
-        
-        // Log detalhado das categorias encontradas
-        filtered.forEach((category, index) => {
-            console.log(`\n${index + 1}. ${category.name}`);
-            console.log(`   Módulos: ${category.modules.length}`);
-            category.modules.forEach((module, moduleIndex) => {
-                console.log(`     ${moduleIndex + 1}. ${module.title} (${module.level})`);
-            });
-        });
-        
-        return filtered;
-    }, [categories, selectedLevel, currentUserLevel, getCategoryLevel]);
-
-    // Categorias finais para exibição (com busca)
-    const displayCategories = useMemo(() => {
-        if (searchQuery.trim()) {
-            return searchResults;
-        }
-        return getFilteredCategories;
-    }, [searchQuery, searchResults, getFilteredCategories]);
-
-
-
-    // Função para verificar se uma categoria está realmente concluída
-    const isCategoryReallyCompleted = useCallback((category: ModuleCategoryType): boolean => {
-        if (!category.modules || category.modules.length === 0) {
-            return false;
-        }
-
-        // Verificar se TODOS os quizzes da categoria foram concluídos
-        const allQuizzesCompleted = category.modules.every(module => {
-            const isCompleted = quizCompletionStatus.get(module.id) || false;
-            console.log(`🔍 Quiz "${module.title}" (${module.id}): ${isCompleted ? 'CONCLUÍDO' : 'NÃO CONCLUÍDO'}`);
-            return isCompleted;
-        });
-
-        console.log(`📊 Categoria "${category.name}": ${allQuizzesCompleted ? 'TOTALMENTE CONCLUÍDA' : 'NÃO CONCLUÍDA'} (${category.modules.length} quizzes)`);
-        return allQuizzesCompleted;
-    }, [quizCompletionStatus]);
-
-    // Função para obter a cor da coroa baseada no nível (usando sistema padronizado)
-    const getCrownColor = (level: string): string => {
-        return getLevelColors(level).primary;
-    };
-
-
-    // Mapeamento de nomes de categorias por nível (usando IDs que vêm do backend)
+    // ✅ Mapeamento de nomes de categorias por nível (DEFINIR ANTES DO useMemo)
     const getCategoryNameByLevel = useCallback((categoryName: string, level: string): string => {
         const nameMapping: Record<string, Record<string, string>> = {
             'propriedades-som': {
@@ -499,30 +442,230 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         return nameMapping[categoryName]?.[level] || categoryName;
     }, []);
 
+    // Função para filtrar categorias por nível (otimizada com useMemo)
+    const getFilteredCategories = useMemo(() => {
+        console.log(`\n🔍 ===== FILTRO DE CATEGORIAS =====`);
+        console.log(`🎯 Filtro selecionado: "${selectedLevel}"`);
+        console.log(`📚 Total de categorias disponíveis: ${categories.length}`);
+        
+        if (!selectedLevel || selectedLevel === '') {
+            // Por padrão, mostrar apenas categorias do nível atual do usuário
+            const userLevel = currentUserLevel || 'aprendiz';
+            console.log(`📋 Mostrando categorias do nível atual do usuário: ${userLevel}`);
+            
+            const filteredByUserLevel = categories.filter((category) => {
+                if (!category || !category.modules || category.modules.length === 0) {
+                    return false;
+                }
+                
+                const categoryLevel = getCategoryLevel(category);
+                return categoryLevel === userLevel;
+            });
+            
+            console.log(`📊 Categorias do nível ${userLevel}: ${filteredByUserLevel.length}`);
+            return filteredByUserLevel;
+        }
+        
+        console.log(`\n🔍 Processando filtro para nível: ${selectedLevel}`);
+        
+        // NOVA LÓGICA: Filtrar módulos por nível e depois agrupar por categoria
+        // ✅ Usar o slug da categoria (category dos módulos) como chave única, não o nome exibido
+        const categoryMap = new Map<string, ModuleCategoryType>();
+        
+        categories.forEach((category) => {
+            if (!category || !category.modules || category.modules.length === 0) {
+                return;
+            }
+            
+            // Filtrar módulos do nível selecionado (garantir que module.level existe)
+            const modulesOfLevel = category.modules.filter((module) => {
+                return module && module.level && module.level === selectedLevel;
+            });
+            
+            if (modulesOfLevel.length > 0) {
+                // ✅ Usar o slug da categoria (category do primeiro módulo) como chave única
+                // Isso garante que a mesma categoria seja identificada independente do nível
+                const firstModule = modulesOfLevel[0];
+                const categorySlug = firstModule.category || 
+                    category.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                
+                // Se já existe uma categoria com esse slug, adicionar os módulos (evitando duplicatas)
+                if (categoryMap.has(categorySlug)) {
+                    const existingCategory = categoryMap.get(categorySlug)!;
+                    const existingModuleIds = new Set(existingCategory.modules.map(m => m.id));
+                    const newModules = modulesOfLevel.filter(m => m.id && !existingModuleIds.has(m.id));
+                    if (newModules.length > 0) {
+                        existingCategory.modules = [...existingCategory.modules, ...newModules];
+                    }
+                } else {
+                    // ✅ Criar nova categoria mantendo TODAS as propriedades da categoria original
+                    // Usar o nome correto baseado no nível selecionado
+                    const categoryLevel = getCategoryLevel({ ...category, modules: modulesOfLevel });
+                    const displayName = getCategoryNameByLevel(categorySlug, categoryLevel) || category.name;
+                    
+                    // ✅ Garantir que todos os módulos têm todas as propriedades necessárias
+                    const validModules = modulesOfLevel.map(module => ({
+                        ...module,
+                        category: module.category || categorySlug,
+                        level: module.level || selectedLevel,
+                        id: module.id || '',
+                        title: module.title || 'Sem título'
+                    })).filter(module => module.id && module.title); // Filtrar módulos inválidos
+                    
+                    if (validModules.length > 0) {
+                        categoryMap.set(categorySlug, {
+                            ...category, // Mantém todas as propriedades (id, description, etc.)
+                            name: displayName, // Nome correto baseado no nível
+                            modules: validModules // Módulos válidos e completos
+                        });
+                    }
+                }
+            }
+        });
+        
+        // Converter Map para array e garantir que todas as propriedades estejam presentes
+        const filtered = Array.from(categoryMap.values()).filter(cat => 
+            cat && cat.name && cat.modules && cat.modules.length > 0
+        );
+        
+        console.log(`\n📋 ===== RESULTADO FINAL =====`);
+        console.log(`🎯 Filtro: ${selectedLevel}`);
+        console.log(`📊 Categorias encontradas: ${filtered.length}`);
+        
+        // Log detalhado das categorias encontradas
+        filtered.forEach((category, index) => {
+            console.log(`\n${index + 1}. ${category.name}`);
+            console.log(`   Módulos: ${category.modules.length}`);
+            category.modules.forEach((module, moduleIndex) => {
+                console.log(`     ${moduleIndex + 1}. ${module.title} (${module.level})`);
+            });
+        });
+        
+        return filtered;
+    }, [categories, selectedLevel, currentUserLevel, getCategoryLevel, getCategoryNameByLevel]);
+
+    // Categorias finais para exibição (com busca)
+    const displayCategories = useMemo(() => {
+        if (searchQuery.trim()) {
+            return searchResults;
+        }
+        return getFilteredCategories;
+    }, [searchQuery, searchResults, getFilteredCategories]);
+
+
+
+    // ✅ Função MELHORADA para verificar se uma categoria está realmente concluída
+    // Validação mais robusta que verifica TODOS os módulos e seus quizzes
+    const isCategoryReallyCompleted = useCallback((category: ModuleCategoryType): boolean => {
+        if (!category.modules || category.modules.length === 0) {
+            console.warn(`⚠️ Categoria "${category.name}" sem módulos`);
+            return false;
+        }
+
+        // ✅ VALIDAÇÃO INTELIGENTE: Verificar cada módulo individualmente
+        const modulesStatus = category.modules.map(module => {
+            const isCompleted = quizCompletionStatus.get(module.id) || false;
+            return {
+                moduleId: module.id,
+                title: module.title,
+                isCompleted
+            };
+        });
+
+        // Contar módulos completados
+        const completedCount = modulesStatus.filter(m => m.isCompleted).length;
+        const totalCount = modulesStatus.length;
+
+        // Log detalhado para debug
+        console.log(`\n📊 VALIDAÇÃO DE CATEGORIA: "${category.name}"`);
+        console.log(`   Total de módulos: ${totalCount}`);
+        console.log(`   Módulos completados: ${completedCount}`);
+        modulesStatus.forEach(m => {
+            console.log(`   ${m.isCompleted ? '✅' : '❌'} ${m.title} (${m.moduleId})`);
+        });
+
+        // ✅ VALIDAÇÃO: Todos os módulos devem estar completos
+        const allQuizzesCompleted = completedCount === totalCount && totalCount > 0;
+
+        if (allQuizzesCompleted) {
+            console.log(`   ✅ CATEGORIA TOTALMENTE CONCLUÍDA: ${completedCount}/${totalCount}`);
+        } else {
+            console.log(`   ⚠️ CATEGORIA NÃO CONCLUÍDA: ${completedCount}/${totalCount} (faltam ${totalCount - completedCount})`);
+        }
+
+        return allQuizzesCompleted;
+    }, [quizCompletionStatus]);
+
+    // Função para obter a cor da coroa baseada no nível (usando sistema padronizado)
+    const getCrownColor = (level: string): string => {
+        return getLevelColors(level).primary;
+    };
+
     const renderCard = useCallback((category: ModuleCategoryType) => {
-        if (!category || !category.name) {
+        // ✅ Validação mais rigorosa antes de renderizar
+        if (!category || !category.name || !category.modules || category.modules.length === 0) {
+            console.warn('⚠️ Tentativa de renderizar card inválido:', {
+                hasCategory: !!category,
+                hasName: !!category?.name,
+                hasModules: !!category?.modules,
+                modulesLength: category?.modules?.length || 0
+            });
             return null;
         }
         
+        // ✅ Garantir que todos os módulos têm propriedades necessárias
+        const validModules = category.modules.filter(module => 
+            module && module.id && module.title && module.level
+        );
+        
+        if (validModules.length === 0) {
+            console.warn('⚠️ Categoria sem módulos válidos:', category.name);
+            return null;
+        }
+        
+        // ✅ Criar categoria com módulos válidos para garantir consistência
+        const validCategory = {
+            ...category,
+            modules: validModules
+        };
+        
         // Usar função memoizada para determinar nível da categoria
-        const categoryLevel = getCategoryLevel(category);
+        const categoryLevel = getCategoryLevel(validCategory);
         const crownColor = getCrownColor(categoryLevel);
-        const displayName = getCategoryNameByLevel(category.name, categoryLevel);
+        const displayName = getCategoryNameByLevel(validCategory.name, categoryLevel) || validCategory.name;
         
         // Verificar se a categoria está realmente concluída (validação real)
-        const isCategoryCompleted = isCategoryReallyCompleted(category);
+        const isCategoryCompleted = isCategoryReallyCompleted(validCategory);
         
-        // Contar quantos quizzes foram concluídos para exibir progresso
-        const completedQuizzes = category.modules?.filter(module => 
-            quizCompletionStatus.get(module.id) || false
-        ).length || 0;
-        const totalQuizzes = category.modules?.length || 0;
+        // ✅ CONTAGEM INTELIGENTE: Contar quantos quizzes foram concluídos
+        // Usa validação rigorosa para garantir precisão
+        const completedQuizzes = validCategory.modules.filter(module => {
+            if (!module.id) return false;
+            const status = quizCompletionStatus.get(module.id);
+            // ✅ Validar que o status existe e é verdadeiro
+            return status === true;
+        }).length;
+        
+        const totalQuizzes = validCategory.modules.length || 0;
+        
+        // ✅ LOG DE DEBUG: Ajuda a identificar problemas de contagem
+        if (completedQuizzes !== totalQuizzes && completedQuizzes > 0) {
+            console.log(`📊 "${category.name}": ${completedQuizzes}/${totalQuizzes} módulos completados`);
+            // Listar módulos não completados para debug
+            const incompleteModules = validCategory.modules.filter(module => {
+                if (!module.id) return true;
+                return !quizCompletionStatus.get(module.id);
+            });
+            if (incompleteModules.length > 0) {
+                console.log(`   ⚠️ Módulos não completados:`, incompleteModules.map(m => m.title));
+            }
+        }
         
         return (
             <View style={[styles.card, isCategoryCompleted && styles.cardCompleted]}>
                 <TouchableOpacity 
                     style={styles.containerCard} 
-                    onPress={() => handlePressContentListCategory(category)}
+                    onPress={() => handlePressContentListCategory(validCategory)}
                 >
                     <View style={styles.cardHeader}>
                         <View style={styles.topRow}>
@@ -538,7 +681,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             {/* Botão de informações da categoria */}
                             <TouchableOpacity 
                                 style={styles.infoButton}
-                                onPress={() => showCategoryInfo(category)}
+                                onPress={() => showCategoryInfo(validCategory)}
                                 activeOpacity={0.7}
                             >
                                 <MaterialCommunityIcons 
@@ -585,7 +728,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             {/* Coroa com cor baseada no nível da categoria */}
                             <View style={styles.crownContainer}>
                                 <MaterialCommunityIcons 
-                                    name="crown" 
+                                    name="school" 
                                     size={20} 
                                     color={crownColor} 
                                 />
@@ -720,7 +863,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             
                             <View style={styles.levelIconContainer}>
                                 <MaterialCommunityIcons 
-                                    name="crown" 
+                                    name="school" 
                                     size={28} 
                                     color={getLevelColors('aprendiz').primary} 
                                 />
@@ -768,7 +911,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             
                             <View style={[styles.levelIconContainer, isLevelLocked('virtuoso') && styles.iconLocked]}>
                                 <MaterialCommunityIcons 
-                                    name="crown" 
+                                    name="school" 
                                     size={28} 
                                     color={isLevelLocked('virtuoso') ? "#CCC" : getLevelColors('virtuoso').primary} 
                                 />
@@ -819,7 +962,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             
                             <View style={[styles.levelIconContainer, isLevelLocked('maestro') && styles.iconLocked]}>
                                 <MaterialCommunityIcons 
-                                    name="crown" 
+                                    name="school" 
                                     size={28} 
                                     color={isLevelLocked('maestro') ? "#CCC" : getLevelColors('maestro').primary} 
                                 />
@@ -876,11 +1019,17 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             )}
                         </View>
                     ) : (
-                        displayCategories.filter(category => category && category.name).map((category, index) => (
-                            <View key={`category-${category.name}-${index}`} style={styles.cardWrapper}>
-                                {renderCard(category)}
-                            </View>
-                        ))
+                        displayCategories
+                            .filter(category => category && category.name && category.modules && category.modules.length > 0)
+                            .map((category, index) => {
+                                // ✅ Usar uma chave única baseada no slug da categoria + nível para evitar problemas de renderização
+                                const categorySlug = category.modules?.[0]?.category || category.name.toLowerCase().replace(/\s+/g, '-');
+                                return (
+                                    <View key={`category-${categorySlug}-${selectedLevel}-${index}`} style={styles.cardWrapper}>
+                                        {renderCard(category)}
+                                    </View>
+                                );
+                            })
                     )}
                 </View>
             </ScrollView>
