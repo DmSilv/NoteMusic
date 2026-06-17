@@ -3,14 +3,11 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx",
-    "app/(tabs)/Quiz/Quiz.Jsx"
+    "**/*.tsx"
   ]
 }

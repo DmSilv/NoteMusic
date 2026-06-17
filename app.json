@@ -14,28 +14,19 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "statusBar": {
-      "style": "auto",
-      "backgroundColor": "#0087D3",
-      "translucent": false
+    "experiments": {
+      "tsconfigPaths": true
     },
     "android": {
+      "package": "com.notemusic.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0087D3"
-      },
-      "statusBar": {
-        "backgroundColor": "#0087D3",
-        "barStyle": "light-content",
-        "translucent": false
-      },
-      "package": "com.notemusic.app"
+      }
     },
     "ios": {
       "supportsTablet": true,
-      "statusBar": {
-        "style": "dark-content"
-      },
       "bundleIdentifier": "com.notemusic.app"
     },
     "web": {
@@ -45,6 +36,9 @@
       "eas": {
         "projectId": "ee739f31-d8e8-4f6a-8655-58742bb7756b"
       }
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

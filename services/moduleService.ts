@@ -1,5 +1,5 @@
 import apiService, { Module } from './api';
-import { getCategoryDisplayName } from '../constants/CategoryNames';
+import { getCategoryDisplayName } from '@/shared/constants/CategoryNames';
 
 export interface ModuleProgress {
   moduleId: string;

@@ -1,20 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { validateModuleId, validateQuizId, getInvalidIdMessage } from '../utils/validation';
+import { validateModuleId, validateQuizId, getInvalidIdMessage } from '@/shared/utils/validation';
 
-// Configuração da API
-// ✅ DESENVOLVIMENTO LOCAL - Usando backend local quando em modo __DEV__
-// const API_BASE_URL = 'https://notemusic-backend-production.up.railway.app/api'; // PRODUÇÃO (Railway)
+const PRODUCTION_API_URL = 'https://notemusic-backend-production.up.railway.app/api';
+const REQUEST_TIMEOUT_MS = 15000;
 
-// Detecção automática para desenvolvimento local
-const API_BASE_URL = __DEV__ ? (
-  Platform.OS === 'ios' 
-    ? 'http://localhost:3333/api' // ✅ iOS Simulator
-    : 'http://10.0.2.2:3333/api'  // ✅ Android Emulator (10.0.2.2 é o IP do host no emulador)
-) : 'https://notemusic-backend-production.up.railway.app/api'; // PRODUÇÃO
+const AUTH_PUBLIC_ENDPOINTS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgotpassword',
+];
 
-// Para dispositivo físico Android na mesma rede Wi-Fi, use:
-// const API_BASE_URL = 'http://192.168.1.X:3333/api'; // Substitua X pelo IP da sua máquina
+function getDevApiBaseUrl(): string {
+  const debuggerHost =
+    Constants.expoConfig?.hostUri?.split(':')[0] ??
+    Constants.expoGoConfig?.debuggerHost?.split(':')[0];
+
+  if (debuggerHost && debuggerHost !== 'localhost') {
+    return `http://${debuggerHost}:3333/api`;
+  }
+
+  if (Platform.OS === 'ios') {
+    return 'http://localhost:3333/api';
+  }
+
+  return 'http://10.0.2.2:3333/api';
+}
+
+const API_BASE_URL = __DEV__ ? getDevApiBaseUrl() : PRODUCTION_API_URL;
+
+if (__DEV__) {
+  console.log('📡 NoteMusic API (dev):', API_BASE_URL);
+}
 
 // Tipos de dados
 export interface User {
@@ -215,21 +233,30 @@ class ApiService {
       ...options.headers,
     };
 
-    if (this.token) {
+    const isPublicAuthEndpoint = AUTH_PUBLIC_ENDPOINTS.some((path) => endpoint.startsWith(path));
+
+    if (this.token && !isPublicAuthEndpoint) {
       headers.Authorization = `Bearer ${this.token}`;
       console.log('🔑 Token incluído na requisição');
+    } else if (isPublicAuthEndpoint) {
+      console.log('🔓 Endpoint público — sem token');
     } else {
       console.log('⚠️ Nenhum token encontrado');
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     const config: RequestInit = {
       ...options,
       headers,
+      signal: controller.signal,
     };
 
     try {
       console.log('🚀 Enviando requisição...');
       const response = await fetch(url, config);
+      clearTimeout(timeoutId);
       
       console.log('📡 Resposta recebida:');
       console.log('  - Status:', response.status);
@@ -253,13 +280,17 @@ class ApiService {
       console.log('✅ Dados da resposta:', data);
       return data;
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error(`❌ Erro na requisição ${endpoint}:`, error);
       
       // Melhor tratamento de erro de conexão
-      if (error.message?.includes('Network request failed') || 
-          error.message?.includes('Failed to connect') ||
-          error.message?.includes('ECONNREFUSED') ||
-          error.code === 'ECONNREFUSED') {
+      if (
+        error.name === 'AbortError' ||
+        error.message?.includes('Network request failed') || 
+        error.message?.includes('Failed to connect') ||
+        error.message?.includes('ECONNREFUSED') ||
+        error.code === 'ECONNREFUSED'
+      ) {
         throw new Error('NETWORK_ERROR');
       }
       
@@ -269,6 +300,7 @@ class ApiService {
 
   // Métodos de autenticação
   async login(data: LoginData): Promise<{ user: User; token: string }> {
+    await this.removeToken();
     const response = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),

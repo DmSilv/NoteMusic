@@ -2,6 +2,12 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
@@ -105,10 +111,12 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file('notemusic-release-key.keystore')
-            storePassword 'notemusic123'
-            keyAlias 'notemusic-key-alias'
-            keyPassword 'notemusic123'
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
         }
     }
     buildTypes {
@@ -116,7 +124,12 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Using production keystore for release builds
+            if (!keystorePropertiesFile.exists()) {
+                throw new GradleException(
+                    "Release build requires android/keystore.properties. " +
+                    "Copy keystore.properties.example and configure your signing credentials."
+                )
+            }
             signingConfig signingConfigs.release
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()

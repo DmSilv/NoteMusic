@@ -11,6 +11,9 @@ local.properties
 *.iml
 *.hprof
 .cxx/
+keystore.properties
+app/*-release-key.keystore
+app/notemusic-release-key.keystore
 
 # Bundle artifacts
 *.jsbundle

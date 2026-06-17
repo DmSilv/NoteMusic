@@ -1,5 +1,5 @@
 import apiService, { Quiz, QuizSubmission, QuestionValidationResult } from './api';
-import { validateModuleId, validateQuizId, getInvalidIdMessage } from '../utils/validation';
+import { validateModuleId, validateQuizId, getInvalidIdMessage } from '@/shared/utils/validation';
 
 export interface QuizResult {
   score: number;
