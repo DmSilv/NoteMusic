@@ -1,6 +1,7 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert, StatusBar } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import eyeIcon from '@/assets/images/eye.png';
 import eyeOffIcon from '@/assets/images/eye-off.png';
 import TitleComponent from '@/shared/components/form/Title/Title';
@@ -8,7 +9,8 @@ import SubTitleComponent from '@/shared/components/form/SubTitle/SubTitle';
 import PrimaryButton from '@/shared/components/form/PrimaryButton/PrimaryButton';
 import SecondaryButton from '@/shared/components/form/SecondaryButton/SecondaryButton';
 import Input from '@/shared/components/form/Input/Input';
-import MenuBottom from '@/shared/components/layout/MenuBottom';
+import MenuBottom, { getMenuBottomHeight } from '@/shared/components/layout/MenuBottom';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EditAccount from '@/assets/images/Edit-Account.png';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +26,8 @@ interface ModuleCategoryProps {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const { user, logout, updateUser } = useAuth();
+    const { level: themeLevel } = useLevelTheme();
+    const insets = useSafeAreaInsets();
     
     // Estados do formulário
     const [formData, setFormData] = useState({
@@ -275,14 +279,7 @@ interface ModuleCategoryProps {
     };
 
     return (
-        <>
-            <StatusBar 
-                barStyle="light-content" 
-                backgroundColor="#0087D3" 
-                translucent={false}
-                animated={true}
-            />
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+        <LevelScreenShell level={themeLevel}>
             <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -290,7 +287,10 @@ interface ModuleCategoryProps {
             >
             <ScrollView
                 ref={scrollViewRef}
-                contentContainerStyle={styles.scrollViewContent}
+                contentContainerStyle={[
+                  styles.scrollViewContent,
+                  !keyboardVisible && { paddingBottom: getMenuBottomHeight(insets.bottom) },
+                ]}
                 keyboardShouldPersistTaps="handled"
             >
                 <View style={[styles.containerForm, { marginTop: calculateMarginTop(), borderTopLeftRadius: keyboardVisible ? 0 : 40, borderTopRightRadius: keyboardVisible ? 0 : 40 }]}>
@@ -408,15 +408,14 @@ interface ModuleCategoryProps {
 
             {!keyboardVisible && (
               <MenuBottom
-              current="profile"
-              goHome={() => navigation.navigate('ProfileHome')}
-              goProfile={() => {}}
-          />
-          
+                current="profile"
+                level={themeLevel}
+                goHome={() => navigation.navigate('ProfileHome')}
+                goProfile={() => {}}
+              />
             )}
             </KeyboardAvoidingView>
-        </SafeAreaView>
-        </>
+        </LevelScreenShell>
     );
 }
 
@@ -424,7 +423,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: 'white',
-        marginTop: -40,
+        marginTop: 0,
         borderRadius: 0,
     },
     containerForm: {

@@ -1,7 +1,11 @@
-import React from 'react';
-import { StyleSheet, View, Image, SafeAreaView, StatusBar, useWindowDimensions } from 'react-native';
+import React, { useCallback } from 'react';
+import { Platform, StyleSheet, View, Image, useWindowDimensions } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import * as NavigationBar from 'expo-navigation-bar';
+import LevelTopBar from '@/shared/components/layout/LevelTopBar';
 import garota_sentada from '@/assets/images/garota_sentada.png';
 import LogoName from '@/assets/images/LogoName.png';
+import { getLogoNameHeight, logoNameImageStyles } from '@/shared/constants/logoNameLayout';
 import TitleComponent from '@/shared/components/form/Title/Title';
 import SubTitle from '@/shared/components/form/SubTitle/SubTitle';
 import TertiaryButton from '@/shared/components/form/TertiaryButton/TertiaryButton';
@@ -12,9 +16,50 @@ interface Props {
   navigation: NavigationProp<any>;
 }
 
-export default function ShowAccountSelectionScreen({ navigation }: Props) {
+const HERO_MODAL_GAP = 32;
+const WELCOME_ANDROID_NAV_BAR = '#FFFFFF';
 
+export default function ShowAccountSelectionScreen({ navigation }: Props) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') {
+        return undefined;
+      }
+
+      (async () => {
+        try {
+          // Edge-to-edge: setStyle evita scrim laranja; não usar setBackgroundColorAsync aqui
+          NavigationBar.setStyle('light');
+          await NavigationBar.setButtonStyleAsync('dark');
+        } catch {
+          try {
+            await NavigationBar.setBackgroundColorAsync(WELCOME_ANDROID_NAV_BAR);
+            await NavigationBar.setButtonStyleAsync('dark');
+          } catch {
+            // ignore
+          }
+        }
+      })();
+
+      return () => {
+        (async () => {
+          try {
+            NavigationBar.setStyle('auto');
+            await NavigationBar.setButtonStyleAsync('dark');
+            await NavigationBar.setBackgroundColorAsync(WELCOME_ANDROID_NAV_BAR);
+          } catch {
+            try {
+              NavigationBar.setStyle('auto');
+            } catch {
+              // ignore
+            }
+          }
+        })();
+      };
+    }, [])
+  );
 
   const handlePressLogin = () => {
     navigation.navigate('LoginScreen');
@@ -24,36 +69,34 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
     navigation.navigate('RegisterUser');
   };
 
-  const getMarginBottom = (height: number): number => (height <= 720 ? height * 0.35 : height * 0.25);
-
-  const heightLogo = (height: number): number => (height <= 720 ? height * 0.25 : height * 0.2); // Retornar número
-
-  const imageHeight = (height: number): number => (height <= 720 ? height * 0.4 : height * 0.2); // Retornar número
-
-
-
+  const heightLogoImage = getLogoNameHeight(windowHeight);
   const shouldDisplayImage = (height: number) => height > 720;
-
-  const getFormContainerMarginBottom = (height: number): string => (height <= 720 ? '50%' : '0%');
-
-  const imageWidth = windowWidth * 1.2;
-  const containerModelHeight = 320; // Aumentado para dar mais espaço
-  const marginBottom = getMarginBottom(windowHeight);
-  const heightLogoImage = heightLogo(windowHeight);
-  const formContainerMarginBottom = getFormContainerMarginBottom(windowHeight);
+  const imageWidth = windowWidth * 1.1;
+  const illustrationMaxHeight = windowHeight * 0.3;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <View style={styles.root}>
+      <LevelTopBar />
       <View style={styles.body}>
-        <View style={[styles.containerImage, { height: windowHeight - containerModelHeight - marginBottom, marginBottom }]}>
-          <Image source={LogoName} style={[styles.imagelogo, { height: heightLogoImage }]} />
+        <View style={[styles.heroSection, { paddingBottom: HERO_MODAL_GAP }]}>
+          <Image source={LogoName} style={[logoNameImageStyles.image, { height: heightLogoImage }]} />
           {shouldDisplayImage(windowHeight) && (
-            <Image source={garota_sentada} style={[styles.image, { width: imageWidth, height: '100%' }]} />
+            <Image
+              source={garota_sentada}
+              style={[
+                styles.image,
+                {
+                  width: imageWidth,
+                  maxHeight: illustrationMaxHeight,
+                  marginTop: 12,
+                },
+              ]}
+            />
           )}
         </View>
 
-        <View style={[styles.containerModel, { height: containerModelHeight }]}>
+        <View style={styles.modalSection}>
+          <View style={styles.containerModel}>
           <View style={styles.containerTitle}>
             <TitleComponent title="Bem-vindo ao NoteMusic" color="white" fontFamily="Roboto-Bold" fontSize={''} truncate={false} />
           </View>
@@ -77,32 +120,35 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
             <TertiaryButton title="Criar Conta" onPress={handlePressRegister} stylewidht={{ width: windowWidth * 0.4 }} />
             <SecondaryButton title="Já possui conta" onPress={handlePressLogin} styleWidth={{ width: windowWidth * 0.4 }} />
           </View>
+          </View>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
     backgroundColor: '#fff',
   },
   body: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  containerImage: {
+  heroSection: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-  },
-  imagelogo: {
-    width: '90%',
+    paddingTop: 12,
+    minHeight: 0,
+    backgroundColor: '#FFFFFF',
   },
   image: {
     resizeMode: 'contain',
+  },
+  modalSection: {
+    backgroundColor: '#1281BF',
   },
   containerModel: {
     backgroundColor: '#1281BF',
@@ -111,10 +157,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 45,
     paddingHorizontal: '5%',
     paddingVertical: 20,
-    position: 'absolute',
-    bottom: 0,
-  },containerTitle:{
-    alignSelf:'center'
+  },
+  containerTitle: {
+    alignSelf: 'center',
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -123,5 +168,4 @@ const styles = StyleSheet.create({
     marginBottom: 35,
     width: '100%',
   },
-
 });

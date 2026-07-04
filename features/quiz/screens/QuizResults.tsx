@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import quizService from '@/services/quizService';
 import quizAttemptService, { QuizAttemptStatus } from '@/services/quizAttemptService';
-import quizCompletionService from '@/services/quizCompletionService';
+import { syncProgressAfterQuizSubmit } from '@/shared/utils/userProgress';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -23,7 +24,8 @@ interface QuizAnswer {
 }
 
 const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
-    const { user } = useAuth();
+    const { user, refreshUserProfile } = useAuth();
+    const { level: themeLevel } = useLevelTheme();
     
     const {
         totalQuestions = 0,
@@ -52,6 +54,8 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
     const [submissionStatus, setSubmissionStatus] = useState({
         submitted: false,
         registered: false,
+        synced: false,
+        backendPassed: false,
         error: false,
         errorMessage: ''
     });
@@ -59,39 +63,46 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
     useEffect(() => {
         const handleSubmissions = async () => {
             try {
-                // Submeter resultados para o backend se usuário autenticado
+                let submitResult = null;
+
                 if (user && quizId && answers.length > 0) {
-                    await submitQuizResults();
-                    setSubmissionStatus(prev => ({ ...prev, submitted: true }));
+                    submitResult = await submitQuizResults();
+                    setSubmissionStatus(prev => ({
+                        ...prev,
+                        submitted: true,
+                        backendPassed: submitResult?.passed ?? passed,
+                    }));
                 }
 
-                // Registrar tentativa e verificar status
                 if (!isDailyChallenge && quizId && moduleId) {
                     await registerQuizAttempt();
                     setSubmissionStatus(prev => ({ ...prev, registered: true }));
                 }
 
-                // Otimista: se passou, marcar como concluído no cache local para refletir na lista
-                if (!isDailyChallenge && moduleId && passed) {
-                    try {
-                        quizCompletionService.markQuizAsCompleted(moduleId, {
-                            quizId: moduleId,
-                            score: correctAnswers,
+                const backendPassed = submitResult?.passed ?? passed;
+
+                if (!isDailyChallenge && moduleId && backendPassed && user) {
+                    await syncProgressAfterQuizSubmit(
+                        {
+                            moduleId,
+                            quizId,
+                            passed: backendPassed,
                             percentage,
-                            passed: true,
-                            completedAt: new Date().toISOString()
-                        });
-                        console.log('✅ Quiz marcado como concluído no cache local:', moduleId);
-                    } catch (err) {
-                        console.log('⚠️ Erro ao marcar quiz como concluído no cache:', err instanceof Error ? err.message : String(err));
-                    }
+                            score: correctAnswers,
+                            totalPoints: submitResult?.totalPoints,
+                        },
+                        refreshUserProfile
+                    );
+                    setSubmissionStatus(prev => ({ ...prev, synced: true }));
+                } else if (backendPassed && isDailyChallenge) {
+                    await refreshUserProfile();
                 }
             } catch (err) {
                 console.error('❌ Erro ao processar submissões do quiz:', err);
-                setSubmissionStatus(prev => ({ 
-                    ...prev, 
-                    error: true, 
-                    errorMessage: err instanceof Error ? err.message : 'Erro desconhecido ao processar resultados'
+                setSubmissionStatus(prev => ({
+                    ...prev,
+                    error: true,
+                    errorMessage: err instanceof Error ? err.message : 'Erro desconhecido ao processar resultados',
                 }));
             }
         };
@@ -101,7 +112,13 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
 
     const submitQuizResults = async () => {
         try {
-            console.log('📝 Submetendo resultados do quiz ao backend:', { quizId, answersCount: answers.length });
+            console.log('📝 [QuizResults] Payload submit:', {
+                quizId,
+                moduleId,
+                userId: user?.id,
+                answersCount: answers.length,
+                timeSpent,
+            });
             const formattedAnswers = answers.map((answer: QuizAnswer) => answer.selectedAnswer);
             
             const result = await quizService.submitQuiz({
@@ -110,11 +127,16 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                 timeSpent
             });
             
-            console.log('✅ Quiz submetido com sucesso:', result);
+            console.log('✅ [QuizResults] Resposta do backend:', {
+                passed: result.passed,
+                percentage: result.percentage,
+                totalPoints: result.totalPoints,
+                pointsEarned: result.pointsEarned,
+            });
             return result;
         } catch (error) {
             console.error('❌ Erro ao submeter quiz:', error);
-            throw error; // Propagar erro para ser tratado no useEffect
+            throw error;
         }
     };
 
@@ -272,11 +294,11 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         // Isso permite que o próximo módulo seja desbloqueado automaticamente
         if (passed && moduleId) {
             console.log('✅ Quiz passou! Sinalizando atualização de status...');
-            // Tentar navegar de volta para a lista de módulos com sinal de refresh
             try {
                 navigation.navigate('ContentListCategory', {
                     refreshStatus: true,
-                    completedModuleId: moduleId
+                    completedModuleId: moduleId,
+                    forceProgressRefresh: true,
                 });
                 return;
             } catch (error) {
@@ -284,10 +306,9 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
             }
         }
         
-        // Fallback: voltar para home
         navigation.reset({
             index: 0,
-            routes: [{ name: 'ProfileHome' }],
+            routes: [{ name: 'ProfileHome', params: { forceRefresh: true } }],
         });
     };
 
@@ -352,21 +373,14 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         navigation.reset({
             index: 1,
             routes: [
-                { name: 'ProfileHome' },
+                { name: 'ProfileHome', params: { forceRefresh: true } },
                 { name: 'ModuleCategory' }
             ],
         });
     };
 
     return (
-        <>
-            <StatusBar 
-                barStyle="light-content" 
-                backgroundColor="#0087D3" 
-                translucent={false}
-                animated={true}
-            />
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+        <LevelScreenShell level={themeLevel}>
             <View style={styles.container}>
             <ScrollView 
                 style={styles.scrollView} 
@@ -674,8 +688,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                 </View>
             </ScrollView>
             </View>
-        </SafeAreaView>
-        </>
+            </LevelScreenShell>
     );
 };
 

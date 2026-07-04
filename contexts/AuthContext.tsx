@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiService, { User, LoginData, RegisterData, UpdateUserData } from '@/services/api';
+import apiService, { User, LoginData, RegisterData, UpdateUserData, normalizeUser } from '@/services/api';
 import { processError } from '@/shared/utils/errorHandler';
+import { clearUserSessionCache } from '@/shared/utils/sessionCache';
+
+function devLog(...args: unknown[]) {
+  if (__DEV__) {
+    console.log(...args);
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -14,6 +21,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateUser: (userData: UpdateUserData) => Promise<void>;
   checkAuth: () => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
   changeTempPassword: (currentPassword: string, newPassword: string) => Promise<void>;
   checkAccountStatus: () => Promise<{ isDeactivated: boolean; deletionInfo?: any }>;
   clearDeactivatedFlag: () => void; // ADDED
@@ -50,48 +58,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const userData = await AsyncStorage.getItem('@NoteMusic:user');
       const token = await AsyncStorage.getItem('@NoteMusic:token');
       const savedEmail = await AsyncStorage.getItem('@NoteMusic:savedEmail');
-      const savedPassword = await AsyncStorage.getItem('@NoteMusic:savedPassword');
-      const shouldAutoLogin = await AsyncStorage.getItem('@NoteMusic:autoLogin');
+      const shouldRememberEmail = await AsyncStorage.getItem('@NoteMusic:rememberEmail');
+
+      // Migração: remover senha salva de versões antigas (inseguro)
+      await AsyncStorage.multiRemove([
+        '@NoteMusic:savedPassword',
+        '@NoteMusic:autoLogin',
+      ]);
       
       if (userData && token) {
-        setUser(JSON.parse(userData));
-        // Não verificar token automaticamente para evitar erros
-        console.log('Usuário carregado do storage');
-      } 
-      // Se temos credenciais salvas e a opção de auto login está ativa
-      else if (shouldAutoLogin === 'true' && savedEmail && savedPassword) {
-        console.log('Tentando login automático com credenciais salvas');
-        try {
-          // Não chamar login diretamente para evitar loops
-          const response = await apiService.login({
-            email: savedEmail,
-            password: savedPassword
-          });
-          
-          setUser(response.user);
-          console.log('✅ Login automático realizado com sucesso');
-        } catch (loginError: any) {
-          // Verificar se é erro de conta desativada
-          if (loginError.message?.includes('desativada') || 
-              loginError.message?.includes('desativado') ||
-              loginError.message?.includes('conta foi desativada') ||
-              loginError.message?.includes('Sua conta foi desativada')) {
-            console.log('⚠️ Conta desativada detectada no login automático - redirecionando para tela apropriada');
-            // Limpar credenciais salvas para evitar tentativas futuras
-            await AsyncStorage.removeItem('@NoteMusic:savedEmail');
-            await AsyncStorage.removeItem('@NoteMusic:savedPassword');
-            await AsyncStorage.removeItem('@NoteMusic:autoLogin');
-            // Marcar que uma conta desativada foi detectada
-            setDeactivatedAccountDetected(true);
-            // Não definir usuário, deixar que a tela de login trate o redirecionamento
-          } else {
-            console.error('Erro ao tentar login automático:', loginError);
-            // Não mostrar erro para o usuário, apenas falhar silenciosamente
-          }
+        const parsed = JSON.parse(userData);
+        const normalized = normalizeUser(parsed);
+        if (normalized?.id) {
+          setUser(normalized);
+        } else {
+          await AsyncStorage.removeItem('@NoteMusic:user');
         }
+      } else if (shouldRememberEmail === 'true' && savedEmail) {
+        // Apenas pré-preenche e-mail — senha nunca é persistida localmente
+        devLog('E-mail salvo encontrado para pré-preenchimento');
       }
     } catch (error) {
-      console.error('Erro ao carregar usuário do storage:', error);
+      if (__DEV__) {
+        console.error('Erro ao carregar usuário do storage:', error);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -105,6 +95,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Erro ao verificar autenticação:', error);
       // Não fazer logout automático para evitar loops
+    }
+  };
+
+  const refreshUserProfile = async () => {
+    try {
+      const profile = await apiService.getProfile();
+      setUser(profile);
+      await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(profile));
+      console.log('✅ Perfil sincronizado do backend:', profile.level, profile.id);
+    } catch (error) {
+      console.error('Erro ao atualizar perfil do backend:', error);
+      throw error;
     }
   };
 
@@ -131,8 +133,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoginInProgress(true);
       setLastLoginAttempt(now);
       setLoginAttempts(prev => prev + 1);
+
+      await clearUserSessionCache();
       
-      console.log('🔄 Tentando fazer login...');
       const response = await apiService.login(loginData);
       
       // Verificar se a conta está desativada
@@ -148,26 +151,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         // Se não for erro de conta desativada, continuar normalmente
       }
-      
-      setUser(response.user);
-      await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(response.user));
-      
-      // Se opção "Lembrar" está marcada, salvar credenciais
-      if (rememberMe) {
-        console.log('📝 Salvando credenciais para auto login');
-        await AsyncStorage.setItem('@NoteMusic:savedEmail', loginData.email);
-        await AsyncStorage.setItem('@NoteMusic:savedPassword', loginData.password);
-        await AsyncStorage.setItem('@NoteMusic:autoLogin', 'true');
-      } else {
-        // Limpar credenciais salvas se opção não marcada
-        await AsyncStorage.removeItem('@NoteMusic:savedEmail');
-        await AsyncStorage.removeItem('@NoteMusic:savedPassword');
-        await AsyncStorage.removeItem('@NoteMusic:autoLogin');
+
+      let currentUser = response.user;
+      try {
+        currentUser = await apiService.getProfile();
+      } catch (profileError) {
+        console.warn('Não foi possível atualizar perfil após login, usando resposta do login:', profileError);
       }
       
-      // Reset contador de tentativas em caso de sucesso
+      setUser(currentUser);
+      await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(currentUser));
+      
+      // "Lembrar-me" persiste apenas o e-mail — nunca a senha
+      if (rememberMe) {
+        await AsyncStorage.setItem('@NoteMusic:savedEmail', loginData.email);
+        await AsyncStorage.setItem('@NoteMusic:rememberEmail', 'true');
+      } else {
+        await AsyncStorage.removeItem('@NoteMusic:savedEmail');
+        await AsyncStorage.removeItem('@NoteMusic:rememberEmail');
+      }
+      
       setLoginAttempts(0);
-      console.log('✅ Login realizado com sucesso');
       
       // Retornar informações sobre senha temporária se existir
       return {
@@ -175,9 +179,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         warning: response.warning
       };
     } catch (error: any) {
-      console.error('❌ Erro ao fazer login:', error);
-      
-      // Processar erro com sistema de tratamento
       const processedError = processError(error);
       throw new Error(processedError.message);
     } finally {
@@ -186,28 +187,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const register = async (registerData: RegisterData) => {
-    console.log('🔍 AuthContext: Iniciando registro...');
-    console.log('📤 AuthContext: Dados recebidos:', registerData);
-    
     try {
-      console.log('🌐 AuthContext: Chamando apiService.register...');
+      await clearUserSessionCache();
       const response = await apiService.register(registerData);
+
+      let currentUser = response.user;
+      try {
+        currentUser = await apiService.getProfile();
+      } catch (profileError) {
+        console.warn('Não foi possível atualizar perfil após registro:', profileError);
+      }
       
-      console.log('✅ AuthContext: Resposta da API:', response);
-      
-      setUser(response.user);
-      await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(response.user));
-      
-      console.log('✅ AuthContext: Registro concluído com sucesso!');
+      setUser(currentUser);
+      await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(currentUser));
     } catch (error: any) {
-      console.error('❌ AuthContext: Erro no registro:', error);
-      console.error('❌ AuthContext: Tipo do erro:', typeof error);
-      console.error('❌ AuthContext: Mensagem:', error?.message);
-      
-      // Processar erro com sistema de tratamento
       const processedError = processError(error);
-      console.error('❌ AuthContext: Erro processado:', processedError);
-      
       throw new Error(processedError.message);
     }
   };
@@ -218,11 +212,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Erro ao fazer logout na API:', error);
     }
-    
+
     try {
+      await clearUserSessionCache();
       await AsyncStorage.removeItem('@NoteMusic:user');
       await AsyncStorage.removeItem('@NoteMusic:token');
       setUser(null);
+      setLoginAttempts(0);
+      setIsLoginInProgress(false);
     } catch (error) {
       console.error('Erro ao limpar storage:', error);
     }
@@ -303,6 +300,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     updateUser,
     checkAuth,
+    refreshUserProfile,
     changeTempPassword,
     checkAccountStatus,
     clearDeactivatedFlag, // ADDED

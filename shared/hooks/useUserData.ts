@@ -12,6 +12,10 @@ interface UserData {
 const userDataCache = new Map<string, { data: UserData; timestamp: number }>();
 const CACHE_DURATION = 30000; // 30 segundos (reduzido para atualizações mais frequentes)
 
+export function clearAllUserDataCache(): void {
+  userDataCache.clear();
+}
+
 export const useUserData = (refreshInterval: number = 60000) => { // Reduzido para 1 minuto
   const { user } = useAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -42,7 +46,7 @@ export const useUserData = (refreshInterval: number = 60000) => { // Reduzido pa
 
     try {
       setIsLoading(true);
-      const stats = await apiService.getUserStats();
+      const stats = await apiService.getUserStats(forceRefresh);
       
       const newUserData = {
         name: user.name || "Usuário",
@@ -75,12 +79,22 @@ export const useUserData = (refreshInterval: number = 60000) => { // Reduzido pa
     }
   }, [user]); // Removido lastUpdate das dependências para evitar loop
 
-  // Carregar dados inicialmente
+  // Carregar dados quando o usuário mudar (troca de conta)
   useEffect(() => {
-    if (user) {
-      loadUserData(true);
+    if (!user?.id && !user?.email) {
+      setUserData(null);
+      setIsLoading(false);
+      setLastUpdate(null);
+      setRetryCount(0);
+      return;
     }
-  }, [user]); // Removido loadUserData das dependências
+
+    setUserData(null);
+    setIsLoading(true);
+    setLastUpdate(null);
+    setRetryCount(0);
+    loadUserData(true);
+  }, [user?.id, user?.email]);
 
   // Atualizar dados periodicamente com backoff inteligente
   useEffect(() => {
@@ -111,7 +125,7 @@ export const useUserData = (refreshInterval: number = 60000) => { // Reduzido pa
       const cacheKey = user.id || user.email;
       userDataCache.delete(cacheKey);
     }
-  }, []); // Removido user das dependências
+  }, [user?.id, user?.email]);
 
   return {
     userData,

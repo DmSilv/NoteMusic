@@ -358,6 +358,21 @@ class QuizAttemptService {
   }
 
   /**
+   * Limpar todos os registros locais de tentativas de quiz
+   */
+  async clearAllLocalAttempts(): Promise<void> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const attemptKeys = keys.filter((key) => key.startsWith(this.STORAGE_KEY));
+      if (attemptKeys.length > 0) {
+        await AsyncStorage.multiRemove(attemptKeys);
+      }
+    } catch {
+      // Falha silenciosa
+    }
+  }
+
+  /**
    * Obter todos os quizzes bloqueados
    */
   async getAllBlockedQuizzes(): Promise<Array<{ quizId: string; moduleId: string; cooldownInfo: QuizCooldownInfo }>> {

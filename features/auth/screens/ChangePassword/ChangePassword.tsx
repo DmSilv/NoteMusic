@@ -1,6 +1,6 @@
-import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, StatusBar } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import garota_sentada from '@/assets/images/autenticacao.png';
 import eyeIcon from '@/assets/images/eye.png'; 
 import eyeOffIcon from '@/assets/images/eye-off.png'; 
@@ -100,14 +100,7 @@ export default function ChangePasswordScreen({ navigation, route }: ChangePasswo
   }, []);
 
   return (
-    <>
-      <StatusBar 
-        barStyle="light-content" 
-        backgroundColor="#0087D3" 
-        translucent={false}
-        animated={true}
-      />
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+    <LevelScreenShell>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -215,8 +208,7 @@ export default function ChangePasswordScreen({ navigation, route }: ChangePasswo
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
-    </>
+    </LevelScreenShell>
   );
 }
 
@@ -233,7 +225,7 @@ const styles = StyleSheet.create({
   containerForm: {
     backgroundColor: 'white',
     width: '90%',
-    marginTop: -20,
+    marginTop: 0,
     marginLeft: 24,
     marginRight: 24,
     paddingBottom: 30,

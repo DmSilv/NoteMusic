@@ -4,30 +4,37 @@ import SubTitleComponent from '@/shared/components/form/SubTitle/SubTitle';
 import TitleComponent from '@/shared/components/form/Title/Title';
 import { useAuth } from '@/contexts/AuthContext';
 import { getLevelColors, formatLevelDisplay } from '@/shared/constants/theme';
+import { getLevelTheme } from '@/shared/constants/levelTheme';
 import { useUserData } from '@/shared/hooks/useUserData';
 
 // Definindo os tipos de props para o componente
 interface UserInfoProps {
     userName?: string;
     userSubtitle?: string;
-    useRealTimeData?: boolean; // Nova prop para controlar se deve buscar dados em tempo real
+    useRealTimeData?: boolean;
+    /** 'chrome' = textos/ícones brancos para header sobre fundo colorido do nível */
+    variant?: 'content' | 'chrome';
 }
 
 const UserInfo: React.FC<UserInfoProps> = ({ 
     userName: propUserName, 
     userSubtitle: propUserSubtitle, 
-    useRealTimeData = true 
+    useRealTimeData = true,
+    variant = 'content',
 }) => {
     const { user } = useAuth();
-    const { userData, isLoading, retryCount } = useUserData(useRealTimeData ? 60000 : 0); // 60 segundos se usar dados em tempo real
+    const { userData, isLoading, retryCount } = useUserData(useRealTimeData ? 60000 : 0);
 
-    // Determinar dados a serem exibidos
-    const displayName = propUserName || userData?.name || user?.name || "Usuário";
-    const rawLevel = propUserSubtitle || userData?.level || user?.level || "aprendiz";
-    const displayLevel = formatLevelDisplay(rawLevel);
+    const displayName = propUserName || (isLoading ? '' : userData?.name) || user?.name || 'Usuário';
+    const rawLevel = propUserSubtitle || (isLoading ? '' : userData?.level) || user?.level;
+    const displayLevel = rawLevel ? formatLevelDisplay(rawLevel) : '...';
     
-    // Obter cores baseadas no nível
-    const levelColors = getLevelColors(displayLevel);
+    const levelColors = getLevelColors(rawLevel || user?.level || 'aprendiz');
+    const chrome = getLevelTheme(rawLevel || user?.level || 'aprendiz');
+    const subtitleColor = variant === 'chrome' ? chrome.textColor : levelColors.primary;
+    const titleColor = variant === 'chrome' ? chrome.textColor : levelColors.text;
+    const lineColor = variant === 'chrome' ? chrome.iconColor : levelColors.primary;
+    const badgeColor = variant === 'chrome' ? chrome.iconColor : levelColors.primary;
 
     // Mostrar indicador de erro se houver muitos retries
     const showErrorIndicator = retryCount > 2;
@@ -37,19 +44,19 @@ const UserInfo: React.FC<UserInfoProps> = ({
             <SubTitleComponent 
                 fontFamily={'Roboto-Light'} 
                 subtitle={displayLevel} 
-                color={levelColors.primary} 
+                color={subtitleColor} 
                 marginRight={''} 
                 marginTop={''}
             />
-            <View style={[styles.line, { backgroundColor: levelColors.primary }]} />
+            <View style={[styles.line, { backgroundColor: lineColor }]} />
             <TitleComponent 
                 title={displayName} 
                 fontFamily={'Roboto-Bold'}  
-                color={levelColors.text} 
+                color={titleColor} 
                 fontSize={''}
             />
             {showErrorIndicator && (
-                <View style={[styles.errorIndicator, { backgroundColor: levelColors.primary }]}>
+                <View style={[styles.errorIndicator, { backgroundColor: badgeColor }]}>
                     <Text style={styles.errorText}>!</Text>
                 </View>
             )}

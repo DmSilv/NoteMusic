@@ -1,0 +1,15 @@
+# EAS Build — excluir arquivos desnecessários do upload
+node_modules/
+.git/
+.expo/
+android/.gradle/
+android/build/
+android/app/build/
+ios/Pods/
+ios/build/
+__tests__/
+coverage/
+*.log
+eas-log*.txt
+eas-build-*.json
+.cursor/

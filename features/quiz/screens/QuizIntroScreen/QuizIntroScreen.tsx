@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '@/shared/components/layout/UserInfo/Userinfo';
 import BackButton from '@/shared/components/layout/BackButton/BackButton';
-import { useAuth } from '@/contexts/AuthContext';
-import quizAttemptService, { QuizAttemptStatus } from '@/services/quizAttemptService';
+import quizAttemptService from '@/services/quizAttemptService';
 import quizCompletionService from '@/services/quizCompletionService';
 import moduleService from '@/services/moduleService';
 import quizService from '@/services/quizService';
@@ -32,10 +33,11 @@ interface QuizStatus {
 }
 
 const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) => {
-    const { user } = useAuth();
-    const moduleId = route.params?.moduleId;
-    const quizTitle = route.params?.quizTitle || 'Quiz';
-    
+    const moduleId = route.params?.moduleId as string | undefined;
+    const quizId = (route.params?.quizId as string | undefined) || moduleId;
+    const paramLevel = route.params?.level as string | undefined;
+    const paramQuizTitle = (route.params?.quizTitle as string | undefined) || 'Quiz';
+
     const [quizStatus, setQuizStatus] = useState<QuizStatus>({
         completed: false,
         canPlay: true,
@@ -48,51 +50,55 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
         isOnCooldown: false
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [moduleData, setModuleData] = useState<Module | null>(null);
     const [quizData, setQuizData] = useState<any>(null);
     const [showFullTheory, setShowFullTheory] = useState(false);
 
-    useEffect(() => {
-        if (moduleId) {
-            loadQuizStatus();
-            loadModuleData();
-        }
-    }, [moduleId]);
+    const resolvedLevel = quizData?.level || moduleData?.level || paramLevel || null;
+    const { level: themeLevel } = useLevelTheme(resolvedLevel);
 
-    const loadModuleData = async () => {
-        try {
-            if (moduleId) {
-                console.log('🔍 [QuizIntro] Carregando dados do módulo:', moduleId);
-                
-                // Carregar módulo e quiz separadamente com tratamento de erro individual
-                const module = await moduleService.getModuleById(moduleId);
-                console.log('✅ [QuizIntro] Módulo carregado:', module?.title);
-                setModuleData(module);
-                
-                // Tentar carregar quiz (pode falhar se não existir)
-                try {
-                    const quiz = await quizService.getQuiz(moduleId);
-                    console.log('✅ [QuizIntro] Quiz carregado:', quiz?.title);
-                    setQuizData(quiz);
-                } catch (quizError) {
-                    console.log('⚠️ [QuizIntro] Quiz não encontrado para este módulo');
-                    setQuizData(null);
-                }
-            }
-        } catch (error) {
-            console.error('❌ [QuizIntro] Erro ao carregar dados do módulo:', error);
-            Alert.alert(
-                'Erro de Carregamento', 
-                'Não foi possível carregar as informações do módulo. Verifique sua conexão e tente novamente.',
-                [
-                    { text: 'Voltar', onPress: () => navigation.goBack() },
-                    { text: 'Tentar Novamente', onPress: () => loadModuleData() }
-                ]
-            );
-        } finally {
-            setIsLoading(false);
-        }
+    const displayTitle = quizData?.title || moduleData?.title || paramQuizTitle;
+    const questionCount = quizData?.totalQuestions || quizData?.questions?.length || null;
+    const moduleTheory =
+        moduleData?.content && typeof moduleData.content === 'object' && !Array.isArray(moduleData.content)
+            ? (moduleData.content as { theory?: string }).theory
+            : undefined;
+
+    const getDifficultyLabel = (): string | null => {
+        const difficulties = (quizData?.questions || [])
+            .map((q: { difficulty?: string }) => q.difficulty)
+            .filter(Boolean) as string[];
+        if (difficulties.length === 0) return null;
+        const counts = difficulties.reduce<Record<string, number>>((acc, d) => {
+            acc[d] = (acc[d] || 0) + 1;
+            return acc;
+        }, {});
+        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (!top) return null;
+        const labels: Record<string, string> = {
+            facil: 'Fácil',
+            medio: 'Médio',
+            dificil: 'Difícil',
+        };
+        return labels[top.toLowerCase()] || top;
     };
+
+    useEffect(() => {
+        if (!moduleId) {
+            setLoadError('Módulo não informado. Volte e selecione um quiz novamente.');
+            setIsLoading(false);
+            return;
+        }
+
+        setModuleData(null);
+        setQuizData(null);
+        setLoadError(null);
+        setShowFullTheory(false);
+        setIsLoading(true);
+        loadQuizData();
+        loadQuizStatus();
+    }, [moduleId]);
 
     // Timer para atualizar status a cada minuto (como no desafio diário)
     useEffect(() => {
@@ -117,6 +123,35 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
         return unsubscribe;
     }, [navigation, moduleId]);
 
+    const loadQuizData = async () => {
+        if (!moduleId) return;
+
+        try {
+            console.log('🔍 [QuizIntro] Carregando módulo e quiz:', moduleId);
+
+            const [module, quiz] = await Promise.all([
+                moduleService.getModuleById(moduleId),
+                quizService.getQuiz(moduleId),
+            ]);
+
+            console.log('✅ [QuizIntro] Módulo carregado:', module?.title, 'nível:', module?.level);
+            console.log('✅ [QuizIntro] Quiz carregado:', quiz?.title, 'nível:', quiz?.level);
+
+            setModuleData(module);
+            setQuizData(quiz);
+
+            const level = quiz?.level || module?.level || paramLevel;
+            if (!level) {
+                setLoadError('Não foi possível identificar o nível deste quiz.');
+            }
+        } catch (error) {
+            console.error('❌ [QuizIntro] Erro ao carregar dados do quiz:', error);
+            setLoadError('Não foi possível carregar as informações do quiz. Verifique sua conexão e tente novamente.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const loadQuizStatus = async () => {
         try {
             console.log('🔍 [QuizIntroScreen] Carregando status do quiz para módulo:', moduleId);
@@ -139,7 +174,6 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                     },
                     isOnCooldown: false
                 });
-                setIsLoading(false);
                 return;
             }
 
@@ -260,6 +294,8 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
 
             navigation.navigate('Quiz', { 
                 moduleId,
+                quizId,
+                level: resolvedLevel,
                 attemptStatus: currentStatus
             });
             
@@ -428,41 +464,67 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
 
     if (isLoading) {
         return (
-            <View style={styles.container}>
-                <View style={styles.Header}>
+            <LevelScreenShell level={paramLevel || themeLevel}>
+                <ChromeNavHeader>
                     <View style={styles.backButtoncontainer}>
-                        <BackButton onPress={handlePressProfileHome} />
+                        <BackButton onPress={handlePressProfileHome} level={paramLevel || themeLevel} />
                     </View>
                     <UserInfo useRealTimeData={true} />
-                </View>
+                </ChromeNavHeader>
+                <View style={styles.container}>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#0087D3" />
+                    <ActivityIndicator size="large" color={getLevelColors(paramLevel || themeLevel).primary} />
                     <Text style={styles.loadingText}>Carregando informações do quiz...</Text>
                 </View>
-            </View>
+                </View>
+            </LevelScreenShell>
         );
     }
 
+    if (loadError || !moduleData || !quizData || !resolvedLevel) {
+        return (
+            <LevelScreenShell level={paramLevel || themeLevel}>
+                <ChromeNavHeader>
+                    <View style={styles.backButtoncontainer}>
+                        <BackButton onPress={handlePressProfileHome} level={paramLevel || themeLevel} />
+                    </View>
+                    <UserInfo useRealTimeData={true} />
+                </ChromeNavHeader>
+                <View style={styles.container}>
+                    <View style={styles.loadingContainer}>
+                        <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#FF9800" />
+                        <Text style={styles.errorText}>
+                            {loadError || 'Dados do quiz incompletos. Tente novamente.'}
+                        </Text>
+                        <TouchableOpacity style={styles.retryButton} onPress={() => {
+                            setIsLoading(true);
+                            setLoadError(null);
+                            loadQuizData();
+                            loadQuizStatus();
+                        }}>
+                            <Text style={styles.retryButtonText}>Tentar novamente</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </LevelScreenShell>
+        );
+    }
+
+    const difficultyLabel = getDifficultyLabel();
+
     return (
-        <>
-            <StatusBar 
-                barStyle="light-content" 
-                backgroundColor="#0087D3" 
-                translucent={false}
-                animated={true}
-            />
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
-            <View style={styles.container}>
-            <View style={styles.Header}>
+        <LevelScreenShell level={resolvedLevel}>
+            <ChromeNavHeader>
                 <View style={styles.backButtoncontainer}>
-                    <BackButton onPress={handlePressProfileHome} />
+                    <BackButton onPress={handlePressProfileHome} level={resolvedLevel} />
                 </View>
                 <UserInfo useRealTimeData={true} />
-            </View>
+            </ChromeNavHeader>
+            <View style={styles.container}>
 
             <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
                 <View style={styles.intro}>
-                    <Text style={styles.pageTitle}>{moduleData?.title || quizTitle}</Text>
+                    <Text style={styles.pageTitle}>{displayTitle}</Text>
                     {moduleData?.category && (
                         <Text style={styles.pageSubtitle}>
                             {getCategoryDisplayName(moduleData.category)}
@@ -474,20 +536,26 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                 <View style={styles.quizInfoContainer}>
                     <View style={styles.infoRow}>
                         <MaterialCommunityIcons name="book-open-page-variant" size={16} color="#0087D3" />
-                        <Text style={styles.infoText}>Nível: {formatLevelDisplay(moduleData?.level || 'aprendiz')}</Text>
+                        <Text style={styles.infoText}>Nível: {formatLevelDisplay(resolvedLevel)}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <MaterialCommunityIcons name="clock-outline" size={16} color="#0087D3" />
                         <Text style={styles.infoText}>
-                            Tempo: {quizData?.timeLimit ? `${Math.floor(quizData.timeLimit / 60)} minutos` : '5 minutos'}
+                            Tempo: {quizData?.timeLimit ? `${Math.floor(quizData.timeLimit / 60)} minutos` : moduleData?.quizTimeLimit ? `${Math.floor(moduleData.quizTimeLimit / 60)} minutos` : '5 minutos'}
                         </Text>
                     </View>
                     <View style={styles.infoRow}>
                         <MaterialCommunityIcons name="help-circle-outline" size={16} color="#0087D3" />
                         <Text style={styles.infoText}>
-                            Questões: {quizData?.totalQuestions || quizData?.questions?.length || '3'} perguntas
+                            Questões: {questionCount} perguntas
                         </Text>
                     </View>
+                    {difficultyLabel && (
+                        <View style={styles.infoRow}>
+                            <MaterialCommunityIcons name="chart-line" size={16} color="#0087D3" />
+                            <Text style={styles.infoText}>Dificuldade: {difficultyLabel}</Text>
+                        </View>
+                    )}
                     {!quizStatus.isOnCooldown && (
                         <View style={styles.infoRow}>
                             <MaterialCommunityIcons name="reload" size={16} color="#0087D3" />
@@ -518,11 +586,11 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                 {moduleData?.description || 'Este quiz testará seus conhecimentos sobre o tema abordado.'}
             </Text>
             
-            {moduleData?.content?.theory && (
+            {moduleTheory && (
                 <View style={styles.theoryContainer}>
                     <Text style={styles.theoryTitle}>📚 Conteúdo Teórico:</Text>
-                    {renderFormattedTheory(moduleData.content.theory)}
-                    {moduleData.content.theory.length > 400 && (
+                    {renderFormattedTheory(moduleTheory)}
+                    {moduleTheory.length > 400 && (
                         <TouchableOpacity 
                             style={styles.showMoreButton}
                             onPress={() => setShowFullTheory(!showFullTheory)}
@@ -561,8 +629,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                 </TouchableOpacity>
             </ScrollView>
             </View>
-        </SafeAreaView>
-        </>
+        </LevelScreenShell>
     );
 };
 
@@ -574,9 +641,7 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
     },
     Header: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        paddingBottom: 20,
+        paddingBottom: 8,
     },
     backButtoncontainer: {
         position: 'absolute',
@@ -739,6 +804,25 @@ const styles = StyleSheet.create({
         color: '#0087D3',
         marginTop: 10,
         textAlign: 'center',
+    },
+    errorText: {
+        fontSize: 16,
+        color: '#666',
+        marginTop: 12,
+        textAlign: 'center',
+        paddingHorizontal: 16,
+    },
+    retryButton: {
+        marginTop: 20,
+        backgroundColor: '#0087D3',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 25,
+    },
+    retryButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
     },
     quizInfoContainer: {
         backgroundColor: '#F0F8FF',

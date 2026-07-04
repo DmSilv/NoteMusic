@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, StatusBar, Animated, LayoutAnimation, Platform, UIManager, BackHandler } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, Animated, LayoutAnimation, Platform, UIManager, BackHandler } from 'react-native';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '@/shared/components/layout/UserInfo/Userinfo';
 import BackButton from '@/shared/components/layout/BackButton/BackButton';
@@ -10,6 +11,7 @@ import quizService from '@/services/quizService';
 import quizAttemptService from '@/services/quizAttemptService';
 import { Quiz, QuizQuestion, QuestionValidationResult } from '@/services/api';
 import AppStyles, { AppColors, AppSpacing, AppTypography, getLevelColors, formatLevelDisplay } from '@/shared/constants/theme';
+import { getLevelTheme } from '@/shared/constants/levelTheme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -60,6 +62,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     // Obter cores baseadas no nível do usuário
     const userLevel = user?.level || 'aprendiz';
     const levelColors = getLevelColors(userLevel);
+    const chrome = getLevelTheme(userLevel);
     
     const [startTime] = useState<Date>(new Date());
     const moduleId = route.params?.moduleId;
@@ -837,13 +840,14 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     // Tela de carregamento
     if (state.isLoading) {
         return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <View style={styles.backButtoncontainer}>
-                        <BackButton onPress={handlePressProfileHome} />
-                    </View>
-                    <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
+            <LevelScreenShell level={userLevel}>
+            <ChromeNavHeader>
+                <View style={styles.backButtoncontainer}>
+                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
                 </View>
+                <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
+            </ChromeNavHeader>
+            <View style={styles.container}>
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={levelColors.primary} />
                     <Text style={styles.loadingText}>Carregando quiz...</Text>
@@ -854,23 +858,26 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     )}
                 </View>
             </View>
+            </LevelScreenShell>
         );
     }
 
     // Verificação se quiz foi carregado
     if (!state.quiz || !currentQuestion) {
         return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <View style={styles.backButtoncontainer}>
-                        <BackButton onPress={handlePressProfileHome} />
-                    </View>
-                    <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
+            <LevelScreenShell level={userLevel}>
+            <ChromeNavHeader>
+                <View style={styles.backButtoncontainer}>
+                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
                 </View>
+                <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
+            </ChromeNavHeader>
+            <View style={styles.container}>
                 <View style={styles.loadingContainer}>
                     <Text style={styles.loadingText}>Quiz não encontrado</Text>
                 </View>
             </View>
+            </LevelScreenShell>
         );
     }
 
@@ -880,21 +887,14 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     const isShowingFeedback = state.showFeedback && state.feedbackData;
 
     return (
-        <>
-            <StatusBar 
-                barStyle="light-content" 
-                backgroundColor="#0087D3" 
-                translucent={false}
-                animated={true}
-            />
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
-            <View style={styles.container}>
-            <View style={styles.header}>
+        <LevelScreenShell level={userLevel}>
+            <ChromeNavHeader>
                 <View style={styles.backButtoncontainer}>
-                    <BackButton onPress={handlePressProfileHome} />
+                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
                 </View>
                 <UserInfo useRealTimeData={true} />
-            </View>
+            </ChromeNavHeader>
+            <View style={styles.container}>
 
             {/* Timer e Info do Quiz */}
             <View style={[
@@ -905,7 +905,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     <MaterialCommunityIcons 
                         name="timer-outline" 
                         size={20} 
-                        color={state.timeLeft <= 30 ? '#F44336' : '#0087D3'} 
+                        color={state.timeLeft <= 30 ? '#F44336' : levelColors.primary} 
                         style={styles.timerIcon}
                     />
                     <Text style={[
@@ -1040,8 +1040,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 )}
             </ScrollView>
             </View>
-        </SafeAreaView>
-        </>
+        </LevelScreenShell>
     );
 };
 
@@ -1049,19 +1048,16 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#fff',
-        paddingHorizontal: Math.max(16, screenWidth * 0.04),
+        paddingHorizontal: 16,
     },
     header: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        paddingVertical: Math.max(12, screenHeight * 0.015),
-        marginBottom: Math.max(16, screenHeight * 0.02),
+        marginBottom: 8,
         width: '100%',
     },
     backButtoncontainer: {
         position: 'absolute',
         top: 'auto',
-        left: 20,
+        left: 16,
         zIndex: 10,
     },
     timerContainer: {

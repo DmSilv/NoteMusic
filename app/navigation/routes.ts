@@ -3,6 +3,7 @@ export const ROUTES = {
   LoginScreen: 'LoginScreen',
   RegisterUser: 'RegisterUser',
   RemenberPassword: 'RemenberPassword',
+  ResetPassword: 'ResetPassword',
   SelectLevelPerson: 'SelectLevelPerson',
   ProfileHome: 'ProfileHome',
   ProfileAccount: 'ProfileAccount',

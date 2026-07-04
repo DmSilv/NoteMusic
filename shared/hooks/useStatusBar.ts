@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { StatusBar, Platform } from 'react-native';
 
+import { DEFAULT_LEVEL_CHROME } from '@/shared/constants/levelTheme';
+
 interface UseStatusBarProps {
   backgroundColor?: string;
   barStyle?: 'default' | 'light-content' | 'dark-content';
@@ -8,8 +10,8 @@ interface UseStatusBarProps {
 }
 
 export const useStatusBar = ({
-  backgroundColor = '#007AFF',
-  barStyle = 'light-content',
+  backgroundColor = DEFAULT_LEVEL_CHROME.statusBarBackground,
+  barStyle = DEFAULT_LEVEL_CHROME.statusBarStyle,
   translucent = false
 }: UseStatusBarProps = {}) => {
   useEffect(() => {

@@ -10,7 +10,14 @@ const AUTH_PUBLIC_ENDPOINTS = [
   '/auth/login',
   '/auth/register',
   '/auth/forgotpassword',
+  '/auth/resetpassword',
 ];
+
+function devLog(...args: unknown[]) {
+  if (__DEV__) {
+    console.log(...args);
+  }
+}
 
 function getDevApiBaseUrl(): string {
   const debuggerHost =
@@ -47,6 +54,44 @@ export interface User {
   weeklyGoal?: number;
 }
 
+/** Normaliza respostas da API ou dados salvos no storage para o formato User. */
+export function normalizeUser(raw: unknown): User | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const nested =
+    record.success !== undefined && record.user && typeof record.user === 'object'
+      ? (record.user as Record<string, unknown>)
+      : record;
+
+  const rawId = nested.id ?? nested._id;
+  const id = rawId != null ? String(rawId) : '';
+
+  if (!id && !nested.email) {
+    return null;
+  }
+
+  return {
+    id,
+    name: typeof nested.name === 'string' ? nested.name : '',
+    email: typeof nested.email === 'string' ? nested.email : '',
+    level: typeof nested.level === 'string' ? nested.level : undefined,
+    progress: typeof nested.progress === 'number' ? nested.progress : undefined,
+    streak: typeof nested.streak === 'number' ? nested.streak : undefined,
+    totalPoints:
+      typeof nested.totalPoints === 'number'
+        ? nested.totalPoints
+        : typeof nested.points === 'number'
+          ? nested.points
+          : undefined,
+    weeklyProgress:
+      typeof nested.weeklyProgress === 'number' ? nested.weeklyProgress : undefined,
+    weeklyGoal: typeof nested.weeklyGoal === 'number' ? nested.weeklyGoal : undefined,
+  };
+}
+
 export interface LoginData {
   email: string;
   password: string;
@@ -72,10 +117,11 @@ export interface Module {
   title: string;
   description: string;
   category: string;
-  content: string[];
+  level?: string;
+  content?: string[] | { theory?: string; [key: string]: unknown };
   order: number;
   completedBy: string[];
-  quizTimeLimit?: number; // Tempo do quiz em segundos
+  quizTimeLimit?: number;
 }
 
 export interface Quiz {
@@ -135,6 +181,11 @@ export interface QuizResult {
   percentage: number;
   feedback: string;
   timeSpent: number;
+  passed?: boolean;
+  totalPoints?: number;
+  pointsEarned?: number;
+  level?: string;
+  moduleCompleted?: boolean;
   answerDetails?: Array<{
     questionIndex: number;
     userAnswer: string;
@@ -222,12 +273,9 @@ class ApiService {
 
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
-    
-    console.log('🌐 ApiService.request: Fazendo requisição...');
-    console.log('📍 URL:', url);
-    console.log('📋 Método:', options.method || 'GET');
-    console.log('📤 Body:', options.body);
-    
+
+    devLog('ApiService.request:', options.method || 'GET', endpoint);
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -237,11 +285,6 @@ class ApiService {
 
     if (this.token && !isPublicAuthEndpoint) {
       headers.Authorization = `Bearer ${this.token}`;
-      console.log('🔑 Token incluído na requisição');
-    } else if (isPublicAuthEndpoint) {
-      console.log('🔓 Endpoint público — sem token');
-    } else {
-      console.log('⚠️ Nenhum token encontrado');
     }
 
     const controller = new AbortController();
@@ -254,52 +297,52 @@ class ApiService {
     };
 
     try {
-      console.log('🚀 Enviando requisição...');
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
-      
-      console.log('📡 Resposta recebida:');
-      console.log('  - Status:', response.status);
-      console.log('  - Status Text:', response.statusText);
-      console.log('  - Headers:', Object.fromEntries(response.headers.entries()));
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || `HTTP error! status: ${response.status}`;
-        console.error(`❌ Erro na requisição ${endpoint}:`, errorMessage);
-        console.error('❌ Dados do erro:', errorData);
-        
-        // ✅ Criar erro com status code para tratamento adequado
+        const errorMessage =
+          errorData.message ||
+          (Array.isArray(errorData.errors) && errorData.errors[0]?.msg) ||
+          `HTTP error! status: ${response.status}`;
+
+        if (response.status === 401 && !isPublicAuthEndpoint) {
+          await this.removeToken();
+        }
+
         const error: any = new Error(errorMessage);
         error.status = response.status;
+        error.code = errorData.code;
         error.response = { status: response.status, data: errorData };
         throw error;
       }
 
-      const data = await response.json();
-      console.log('✅ Dados da resposta:', data);
-      return data;
+      return await response.json();
     } catch (error: any) {
       clearTimeout(timeoutId);
-      console.error(`❌ Erro na requisição ${endpoint}:`, error);
-      
-      // Melhor tratamento de erro de conexão
+
       if (
         error.name === 'AbortError' ||
-        error.message?.includes('Network request failed') || 
+        error.message?.includes('Network request failed') ||
         error.message?.includes('Failed to connect') ||
         error.message?.includes('ECONNREFUSED') ||
         error.code === 'ECONNREFUSED'
       ) {
         throw new Error('NETWORK_ERROR');
       }
-      
+
       throw error;
     }
   }
 
   // Métodos de autenticação
-  async login(data: LoginData): Promise<{ user: User; token: string }> {
+  async login(data: LoginData): Promise<{
+    user: User;
+    token: string;
+    requirePasswordChange?: boolean;
+    warning?: string;
+  }> {
     await this.removeToken();
     const response = await this.request('/auth/login', {
       method: 'POST',
@@ -307,7 +350,11 @@ class ApiService {
     });
     
     await this.saveToken(response.token);
-    return response;
+    const user = normalizeUser(response.user);
+    if (!user?.id) {
+      throw new Error('Resposta de login inválida: usuário sem id');
+    }
+    return { ...response, user };
   }
 
   async register(data: RegisterData): Promise<{ user: User; token: string }> {
@@ -326,7 +373,11 @@ class ApiService {
       await this.saveToken(response.token);
       console.log('✅ ApiService: Token salvo com sucesso');
       
-      return response;
+      const user = normalizeUser(response.user);
+      if (!user?.id) {
+        throw new Error('Resposta de registro inválida: usuário sem id');
+      }
+      return { ...response, user };
     } catch (error) {
       console.error('❌ ApiService: Erro na requisição:', error);
       throw error;
@@ -347,15 +398,32 @@ class ApiService {
     }
   }
 
-  async forgotPassword(email: string): Promise<{ message: string }> {
+  async forgotPassword(email: string): Promise<{ message: string; success: boolean }> {
     return await this.request('/auth/forgotpassword', {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
   }
 
+  async resetPassword(payload: {
+    email: string;
+    resetCode: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<{ message: string; success: boolean }> {
+    return await this.request('/auth/resetpassword', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async getProfile(): Promise<User> {
-    return await this.request('/auth/me');
+    const response = await this.request('/auth/me');
+    const user = normalizeUser(response);
+    if (!user?.id) {
+      throw new Error('Perfil inválido: id do usuário não encontrado');
+    }
+    return user;
   }
 
   async getBasicInfo(): Promise<any> {
@@ -382,7 +450,11 @@ class ApiService {
       method: 'PUT',
       body: JSON.stringify(data),
     });
-    return response.user;
+    const user = normalizeUser(response.user ?? response);
+    if (!user?.id) {
+      throw new Error('Resposta de atualização inválida: usuário sem id');
+    }
+    return user;
   }
 
   async updatePassword(currentPassword: string, newPassword: string): Promise<void> {
@@ -462,9 +534,11 @@ class ApiService {
       title: m.title,
       description: m.description,
       category: m.category,
+      level: m.level,
       content: m.content,
       order: m.order,
       completedBy: m.completedBy || [],
+      quizTimeLimit: m.quizTimeLimit,
     } as Module;
   }
 
@@ -472,7 +546,7 @@ class ApiService {
     return await this.request('/modules/categories');
   }
 
-  async completeModule(moduleId: string): Promise<void> {
+  async completeModule(moduleId: string): Promise<{ success?: boolean; message?: string; pointsEarned?: number; totalPoints?: number; level?: string }> {
     return await this.request(`/modules/${moduleId}/complete`, {
       method: 'POST',
     });
@@ -525,7 +599,7 @@ class ApiService {
             difficulty: q.difficulty,
             points: q.points
           })),
-          level: serverQuiz.level || 'iniciante',
+          level: serverQuiz.level || 'aprendiz',
           type: serverQuiz.type || 'module',
           timeLimit: serverQuiz.timeLimit,
           totalQuestions: serverQuiz.totalQuestions || serverQuiz.questions.length,
@@ -568,9 +642,12 @@ class ApiService {
           percentage: response.percentage || Math.round((response.score / response.total) * 100),
           feedback: response.feedback || 'Quiz completado!',
           timeSpent: response.timeSpent || submission.timeSpent,
+          passed: response.passed,
           answerDetails: response.answerDetails,
           pointsEarned: response.pointsEarned,
           totalPoints: response.totalPoints,
+          level: response.level,
+          moduleCompleted: response.moduleCompleted,
           isDailyChallenge: response.isDailyChallenge,
           bonusPoints: response.bonusPoints
         };
@@ -619,7 +696,7 @@ class ApiService {
             difficulty: q.difficulty,
             points: q.points
           })),
-          level: serverQuiz.level || 'iniciante',
+          level: serverQuiz.level || 'aprendiz',
           type: serverQuiz.type || 'daily-challenge',
           timeLimit: serverQuiz.timeLimit,
           totalQuestions: serverQuiz.questions.length
@@ -639,9 +716,10 @@ class ApiService {
   }
 
   // Métodos de gamificação
-  async getUserStats(): Promise<UserStats> {
+  async getUserStats(forceRefresh = false): Promise<UserStats> {
     try {
-      const response = await this.request('/gamification/stats');
+      const query = forceRefresh ? '?_refresh=true' : '';
+      const response = await this.request(`/gamification/stats${query}`);
       const stats = response.stats || response;
       
       // Mapear para a interface UserStats

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform, StatusBar, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform, ScrollView } from 'react-native';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserInfo from '@/shared/components/layout/UserInfo/Userinfo';
@@ -9,7 +10,9 @@ import SubTitleComponent from '@/shared/components/form/SubTitle/SubTitle';
 import TitleComponent from '@/shared/components/form/Title/Title';
 import { useAuth } from '@/contexts/AuthContext';
 import { getLevelColors, formatLevelDisplay } from '@/shared/constants/theme';
+import { getLevelTheme } from '@/shared/constants/levelTheme';
 import { getCategoryDisplayName } from '@/shared/constants/CategoryNames';
+import MusicNoteIconBadge from '@/shared/components/ui/MusicNoteIconBadge';
 import moduleService from '@/services/moduleService';
 import { Module } from '@/services/api';
 import quizCompletionService from '@/services/quizCompletionService';
@@ -34,6 +37,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
     // Obter cores baseadas no nível do usuário
     const userLevel = user?.level || 'aprendiz';
     const levelColors = getLevelColors(userLevel);
+    const chrome = getLevelTheme(userLevel);
 
     useEffect(() => {
         loadModules();
@@ -79,7 +83,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         const unsubscribe = navigation.addListener('focus', () => {
             console.log('🔄 Tela de módulos recebeu foco, atualizando status...');
             if (modules.length > 0) {
-                loadCompletionStatus(modules);
+                loadCompletionStatus(modules, true);
                 loadAttemptStatus(modules);
             }
         });
@@ -91,13 +95,14 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
     useEffect(() => {
         if (route.params?.refreshStatus && modules.length > 0) {
             console.log('🔄 Atualizando status após conclusão de quiz...');
-            loadCompletionStatus(modules);
+            loadCompletionStatus(modules, true);
             loadAttemptStatus(modules);
             
             // Limpar parâmetro para não recarregar repetidamente
             navigation.setParams({ 
                 ...route.params, 
-                refreshStatus: undefined 
+                refreshStatus: undefined,
+                forceProgressRefresh: undefined,
             });
         }
     }, [route.params?.refreshStatus, modules]);
@@ -151,10 +156,10 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         }
     };
 
-    const loadCompletionStatus = async (moduleList: Module[]) => {
+    const loadCompletionStatus = async (moduleList: Module[], forceRefresh = false) => {
         try {
             const moduleIds = moduleList.map(m => m.id);
-            const statusMap = await quizCompletionService.checkMultipleQuizCompletions(moduleIds);
+            const statusMap = await quizCompletionService.checkMultipleQuizCompletions(moduleIds, forceRefresh);
             
             const completionMap = new Map<string, boolean>();
             statusMap.forEach((status, moduleId) => {
@@ -326,9 +331,12 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             }
             
             // 5. Se passou em todas as validações, permitir acesso
+            const selectedModule = modules.find(m => m.id === moduleId);
             navigation.navigate('QuizIntroScreen', { 
                 moduleId,
-                quizTitle: modules.find(m => m.id === moduleId)?.title || 'Quiz',
+                quizId: moduleId,
+                quizTitle: selectedModule?.title || 'Quiz',
+                level: selectedModule?.level,
                 attemptStatus: remoteStatus || currentStatus
             });
             
@@ -408,12 +416,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                 isLocked && { backgroundColor: '#F5F5F5', opacity: 0.7 }
             ]}>
                 <View style={styles.headerlessonContainer}>
-                    <View style={styles.containerNoteIcon}>
-                        <Image
-                            source={require('@/assets/images/music-note.png')}
-                            style={[styles.image, styles.Note]}
-                        />
-                    </View>
+                    <MusicNoteIconBadge style={styles.lessonNoteBadge} />
                     <View style={{ flex: 1 }}>
                         <Text style={[
                             styles.lessonTitle,
@@ -457,7 +460,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                                 <MaterialCommunityIcons 
                                     name={remainingAttempts === 0 ? "alert-circle" : "reload"} 
                                     size={12} 
-                                    color={remainingAttempts === 0 ? "#F44336" : "#0087D3"} 
+                                    color={remainingAttempts === 0 ? "#F44336" : levelColors.primary} 
                                 />
                                 <Text style={[
                                     styles.attemptsText,
@@ -517,37 +520,32 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
 
     if (isLoading) {
         return (
-            <View style={styles.container}>
-                <View style={styles.Header}>
-                    <View style={styles.backButtoncontainer}>
-                        <BackButton onPress={handlePressProfileHome} />
-                    </View>
-                    <UserInfo useRealTimeData={true} />
+            <LevelScreenShell level={userLevel}>
+            <ChromeNavHeader>
+                <View style={styles.backButtoncontainer}>
+                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
                 </View>
+                <UserInfo useRealTimeData={true} />
+            </ChromeNavHeader>
+            <View style={styles.container}>
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={levelColors.primary} />
                     <Text style={styles.loadingText}>Carregando módulos...</Text>
                 </View>
             </View>
+            </LevelScreenShell>
         );
     }
 
     return (
-        <>
-            <StatusBar 
-                barStyle="light-content" 
-                backgroundColor="#0087D3" 
-                translucent={false}
-                animated={true}
-            />
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
-            <View style={styles.container}>
-            <View style={styles.Header}>
+        <LevelScreenShell level={userLevel}>
+            <ChromeNavHeader>
                 <View style={styles.backButtoncontainer}>
-                    <BackButton onPress={handlePressProfileHome} />
+                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
                 </View>
                 <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
-            </View>
+            </ChromeNavHeader>
+            <View style={styles.container}>
 
             {/* Título e Informações da Categoria */}
             <View style={styles.intro}>
@@ -562,8 +560,8 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                     fontFamily={'Roboto-Light'} 
                     subtitle={`${category?.modules?.length || modules?.length || 0} módulos disponíveis para estudo`} 
                     color={''} 
-                    marginRight={''} 
-                    marginTop={4} 
+                    marginRight={0} 
+                    marginTop={6} 
                 />
             </View>
 
@@ -572,13 +570,11 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                 renderItem={renderLesson}
                 keyExtractor={(item) => item.id}
                 showsVerticalScrollIndicator={false}
-                // key para cada item já é garantido pelo keyExtractor;
-                // adicionando extraData para evitar warnings de keys
+                contentContainerStyle={styles.listContent}
                 extraData={modules?.length}
             />
             </View>
-        </SafeAreaView>
-        </>
+        </LevelScreenShell>
     );
 };
 
@@ -586,22 +582,23 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#fff',
-        paddingHorizontal: 10,
+    },
+    listContent: {
+        paddingHorizontal: 16,
+        paddingBottom: 24,
     },
     Header: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        padding: 12,
-        marginBottom: 24,
+        marginBottom: 16,
     },
     backButtoncontainer: {
         position: 'absolute',
-        left: 20,
+        left: 16,
         zIndex: 10,
     },
     intro: {
-        paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 8,
         marginBottom: 8,
     },
     lessonContainer: {
@@ -622,18 +619,11 @@ const styles = StyleSheet.create({
     headerlessonContainer: {
         flexDirection: 'row',
     },
-    containerNoteIcon: {
-        backgroundColor: '#C6E8FF',
-        padding: 2,
+    lessonNoteBadge: {
         marginBottom: 20,
     },
     image: {
         resizeMode: 'contain',
-    },
-    Note: {
-        height: 20,
-        width: 20,
-        margin: 0,
     },
     lessonTitle: {
         fontSize: 18,

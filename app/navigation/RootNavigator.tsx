@@ -8,6 +8,7 @@ import SelectionScreen from '@/features/onboarding/screens/SelectionScreen/Selec
 import LoginScreen from '@/features/auth/screens/LoginScreen';
 import RegisterUser from '@/features/auth/screens/RegisterUser/RegisterUser';
 import RemenberPassword from '@/features/auth/screens/RemenberPassword';
+import ResetPassword from '@/features/auth/screens/ResetPassword/ResetPassword';
 import SelectLevelPerson from '@/features/onboarding/screens/SelectLevelPerson/SelectLevelPerson';
 import ProfileHome from '@/features/profile/screens/ProfileHome/profileHome';
 import ProfileAccount from '@/features/profile/screens/ProfileAccount/ProfileAccount';
@@ -31,6 +32,7 @@ export default function RootNavigator() {
         <Stack.Screen name={ROUTES.LoginScreen} component={LoginScreen} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
         <Stack.Screen name={ROUTES.RegisterUser} component={RegisterUser} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_left' }} />
         <Stack.Screen name={ROUTES.RemenberPassword} component={RemenberPassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name={ROUTES.ResetPassword} component={ResetPassword} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />
         <Stack.Screen name={ROUTES.SelectLevelPerson} component={SelectLevelPerson} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar', animation: 'slide_from_left' }} />
         <Stack.Screen name={ROUTES.ProfileHome} component={ProfileHome} options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name={ROUTES.ProfileAccount} component={ProfileAccount} options={{ headerShown: false, animation: 'fade' }} />

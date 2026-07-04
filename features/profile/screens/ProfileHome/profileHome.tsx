@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, StatusBar, Animated, BackHandler, Alert, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Animated, BackHandler, Alert, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { NavigationProp } from '@react-navigation/native';
-import MenuBottom from '@/shared/components/layout/MenuBottom';
+import { NavigationProp, useFocusEffect } from '@react-navigation/native';
+import MenuBottom, { getMenuBottomHeight } from '@/shared/components/layout/MenuBottom';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LevelTopBar from '@/shared/components/layout/LevelTopBar';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import apiService from '@/services/api';
 import moduleService from '@/services/moduleService';
@@ -43,7 +45,7 @@ function getLevelBadge(level: string): { color: string; icon: keyof typeof Mater
 }
 
 // ✅ FUNÇÃO PARA CALCULAR STATUS DA SEQUÊNCIA (STREAK)
-function getStreakStatus(userStats: UserStats | null) {
+function getStreakStatus(userStats: UserStats | null, accentColor: string) {
   const currentStreak = userStats?.currentStreak || userStats?.streak || 0;
   const lastStudyDate = userStats?.recentActivity?.lastStudyDate;
   
@@ -67,12 +69,12 @@ function getStreakStatus(userStats: UserStats | null) {
     value: `${currentStreak} ${currentStreak === 1 ? 'dia' : 'dias'}`,
     icon,
     description,
-    color: '#0087D3'
+    color: accentColor
   };
 }
 
 // ✅ FUNÇÃO PARA CALCULAR STATUS DOS MÓDULOS COMPLETOS (requisitos para avançar)
-function getModulesStatus(userStats: UserStats | null) {
+function getModulesStatus(userStats: UserStats | null, accentColor: string) {
   const completedModules = userStats?.completedModules || 0;
   const userLevel = userStats?.level?.toLowerCase() || 'aprendiz';
   const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'book-check';
@@ -106,12 +108,12 @@ function getModulesStatus(userStats: UserStats | null) {
     value: `${completedModules}/${requiredModules}`,
     icon,
     description,
-    color: '#0087D3'
+    color: accentColor
   };
 }
 
 // ✅ FUNÇÃO PARA CALCULAR TAXA DE APROVAÇÃO
-function getPassRateStatus(userStats: UserStats | null) {
+function getPassRateStatus(userStats: UserStats | null, accentColor: string) {
   const passRate = userStats?.quizPassRate || 0;
   const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'chart-line';
   
@@ -133,7 +135,7 @@ function getPassRateStatus(userStats: UserStats | null) {
     value: `${Math.round(passRate)}%`,
     icon,
     description,
-    color: '#0087D3'
+    color: accentColor
   };
 }
 
@@ -143,6 +145,7 @@ interface ProfileHomeProps {
 
 export default function ProfileHome({ navigation }: ProfileHomeProps) {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [moduleProgress, setModuleProgress] = useState<any>(null);
@@ -180,9 +183,27 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
   }, [pulseAnim]);
 
   useEffect(() => {
+    if (!user?.id) {
+      setUserStats(null);
+      setModuleProgress(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setUserStats(null);
+    setModuleProgress(null);
+    setIsLoading(true);
+    setDailyChallengeStatus({
+      completed: false,
+      completedAt: null,
+      nextAvailableAt: null,
+      canPlay: true,
+      timeRemaining: '',
+    });
+
     loadUserData();
     loadDailyChallengeStatus();
-  }, [user]); // Recarregar quando o usuário mudar
+  }, [user?.id]);
 
   // ✅ Estado para rastrear se a tela está focada
   const [isScreenFocused, setIsScreenFocused] = useState(false);
@@ -268,29 +289,27 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     return () => backHandler.remove();
   }, [navigation, isScreenFocused]);
 
-  // Atualizar dados quando a tela receber foco (com throttling reduzido para sincronização)
-  useEffect(() => {
-    let lastFocusTime = 0;
-    const FOCUS_THROTTLE = 5000; // Reduzido para 5 segundos para melhor sincronização
-
-    const unsubscribe = navigation.addListener('focus', (e) => {
-      const now = Date.now();
-      // ✅ Verificar se há parâmetro forceRefresh para forçar atualização
-      const routeParams = navigation.getState()?.routes?.find(r => r.name === 'ProfileHome')?.params;
-      const forceRefresh = routeParams?.forceRefresh;
-      
-      if (forceRefresh || (now - lastFocusTime > FOCUS_THROTTLE)) {
-        console.log('🔄 Tela inicial recebeu foco, atualizando dados...', forceRefresh ? '(forçado)' : '');
-        loadUserData(); // Isso recarrega as estatísticas do backend
-        loadDailyChallengeStatus();
-        lastFocusTime = now;
-      } else {
-        console.log('⏰ Throttling: atualização muito recente, pulando...');
+  // Recarregar progresso sempre que a Home receber foco (fonte: backend)
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) {
+        return;
       }
-    });
 
-    return unsubscribe;
-  }, [navigation]); // Removido loadUserData e loadDailyChallengeStatus das dependências
+      const routeParams = navigation.getState()?.routes?.find((r) => r.name === 'ProfileHome')?.params as
+        | { forceRefresh?: boolean }
+        | undefined;
+      const forceRefresh = routeParams?.forceRefresh === true;
+
+      console.log('🔄 [ProfileHome] Foco — recarregando progresso', forceRefresh ? '(forçado)' : '');
+      loadUserData(forceRefresh);
+      loadDailyChallengeStatus();
+
+      if (forceRefresh) {
+        navigation.setParams({ forceRefresh: undefined });
+      }
+    }, [user?.id, navigation])
+  );
 
   // ✅ TIMER AUTOMÁTICO: Verificar a cada minuto se é um novo dia (meia-noite passou)
   useEffect(() => {
@@ -434,9 +453,9 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     }
   };
 
-  const loadUserData = async () => {
-    console.log('🔍 Iniciando loadUserData...');
-    console.log('👤 Usuário atual:', user);
+  const loadUserData = async (forceRefresh = false) => {
+    console.log('🔍 Iniciando loadUserData...', forceRefresh ? '(forçado)' : '');
+    console.log('👤 Usuário atual:', user?.id);
     
     try {
       setIsLoading(true);
@@ -488,7 +507,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       // Se há usuário, tentar buscar dados reais
       console.log('🔐 Usuário autenticado, buscando dados reais...');
       try {
-        const stats = await apiService.getUserStats();
+        const stats = await apiService.getUserStats(forceRefresh);
         console.log('✅ Estatísticas carregadas do backend:', stats);
         setUserStats(stats);
       } catch (apiError) {
@@ -558,35 +577,42 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     }
   };
 
-  if (isLoading) {
+  const { chrome } = useLevelTheme(user?.level ?? userStats?.level);
+  const displayLevel = userStats?.level ?? user?.level;
+
+  if (isLoading || (user && !userStats)) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={{ flex: 1, backgroundColor: chrome.primary }}>
+        <LevelTopBar level={displayLevel} />
+        <View style={{ flex: 1, backgroundColor: chrome.screenContentBackground, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={chrome.primary} />
         <Text style={{ marginTop: 10, color: '#666' }}>Carregando dados...</Text>
+        </View>
       </View>
     );
   }
 
   if (!userStats) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: chrome.primary }}>
+        <LevelTopBar level={displayLevel} />
+        <View style={{ flex: 1, backgroundColor: chrome.screenContentBackground, justifyContent: 'center', alignItems: 'center' }}>
         <Text style={{ color: '#666', fontSize: 16, textAlign: 'center', padding: 20 }}>
-          {user ? 'Carregando dados do usuário...' : 'Faça login para ver suas estatísticas'}
+          Faça login para ver suas estatísticas
         </Text>
-        {!user && (
-          <TouchableOpacity 
-            style={{ 
-              backgroundColor: '#007AFF', 
-              paddingHorizontal: 20, 
-              paddingVertical: 10, 
-              borderRadius: 8,
-              marginTop: 10
-            }}
-            onPress={() => navigation.navigate('LoginScreen')}
-          >
-            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Fazer Login</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          style={{ 
+            backgroundColor: chrome.primary, 
+            paddingHorizontal: 20, 
+            paddingVertical: 10, 
+            borderRadius: 8,
+            marginTop: 10
+          }}
+          onPress={() => navigation.navigate('LoginScreen')}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Fazer Login</Text>
+        </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -604,14 +630,11 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
   const levelBadge = getLevelBadge(safeUserStats.level);
   const greeting = getGreeting(safeUserStats);
-  
-  // ✅ Obter cores do nível atual para aplicar no header e elementos
-  const currentLevelColors = getLevelColors(safeUserStats.level);
 
   // ✅ CÁLCULOS INTELIGENTES PARA OS CARDS
-  const streakStatus = getStreakStatus(userStats);
-  const modulesStatus = getModulesStatus(userStats);
-  const passRateStatus = getPassRateStatus(userStats);
+  const streakStatus = getStreakStatus(userStats, chrome.primary);
+  const modulesStatus = getModulesStatus(userStats, chrome.primary);
+  const passRateStatus = getPassRateStatus(userStats, chrome.primary);
 
   const stats = [
     {
@@ -638,15 +661,13 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: currentLevelColors.primary }}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: currentLevelColors.primary }}>
-        <StatusBar barStyle="light-content" backgroundColor={currentLevelColors.primary} />
-      </SafeAreaView>
+    <View style={{ flex: 1, backgroundColor: chrome.primary }}>
+      <LevelTopBar level={safeUserStats.level} />
       <ScrollView 
-        style={{ flex: 1, backgroundColor: '#F8F9FA' }}
+        style={{ flex: 1, backgroundColor: chrome.screenContentBackground }}
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: Platform.OS === 'android' ? 120 : 100 } // ✅ Margin bottom responsivo maior para Samsung/Android
+          { paddingBottom: getMenuBottomHeight(insets.bottom) },
         ]} 
         showsVerticalScrollIndicator={false}
       >
@@ -667,7 +688,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             </TouchableOpacity>
           </Animated.View>
           <View style={styles.userTextBlock}>
-            <Text style={[styles.greeting, { color: currentLevelColors.primary }]}>
+            <Text style={[styles.greeting, { color: chrome.primary }]}>
               {greeting} <Text style={styles.username}>{user?.name || "Usuário"}</Text>
             </Text>
           </View>
@@ -692,7 +713,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
           Explore todas as categorias musicais disponíveis e continue sua jornada de aprendizado!
         </Text>
         <TouchableOpacity
-          style={styles.categoryButton}
+          style={[styles.categoryButton, { backgroundColor: chrome.primary }]}
           onPress={() => navigation.navigate('ModuleCategory')}
           activeOpacity={0.85}
         >
@@ -766,13 +787,12 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
         {/* ✅ SEÇÃO "STATUS DA JORNADA" REMOVIDA CONFORME SOLICITADO */}
       </ScrollView>
-      <View style={{ backgroundColor: '#F8F9FA' }}>
-        <MenuBottom
-          current="home"
-          goHome={() => {}}
-          goProfile={() => navigation && navigation.navigate ? navigation.navigate('ProfileAccount') : null}
-        />
-      </View>
+      <MenuBottom
+        current="home"
+        level={safeUserStats.level ?? user?.level}
+        goHome={() => {}}
+        goProfile={() => navigation && navigation.navigate ? navigation.navigate('ProfileAccount') : null}
+      />
     </View>
   );
 }
@@ -781,9 +801,8 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingTop: 40,
-    paddingBottom: 32,
-    backgroundColor: '#F8F9FA',
-    flexGrow: 1,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     marginTop: -10,

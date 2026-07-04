@@ -1,7 +1,8 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert, StatusBar, Dimensions } from 'react-native';
-import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import musico from '@/assets/images/musico.png';
 import eyeIcon from '@/assets/images/eye.png'; 
 import eyeOffIcon from '@/assets/images/eye-off.png'; 
@@ -13,15 +14,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { validateName, validateEmail, validatePassword, validatePasswordConfirmation } from '@/shared/utils/validation';
 
 export default function RegisterUser({ navigation }) {
-  const scrollViewRef = useRef<ScrollView>(null); 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const { register, isLoading: authIsLoading } = useAuth();
+  const { register } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  
-  const screenHeight = Dimensions.get('window').height;
+
+  const isCompactScreen = windowHeight <= 720;
+  const illustrationHeight = keyboardVisible
+    ? windowHeight * (isCompactScreen ? 0.14 : 0.18)
+    : windowHeight * (isCompactScreen ? 0.2 : 0.28);
   
   // Estados do formulário
   const [name, setName] = useState('');
@@ -197,169 +200,163 @@ export default function RegisterUser({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
-      <StatusBar barStyle="light-content" backgroundColor="#0087D3" />
+    <LevelScreenShell>
       <View style={styles.blueContainer}>
         <View style={styles.whiteContainer}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ flex: 1 }}
+            style={styles.keyboardView}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
           >
             <ScrollView
-              ref={scrollViewRef}
-              contentContainerStyle={[
-                styles.scrollViewContent,
-                keyboardVisible && { paddingBottom: 150 }
-              ]}
+              contentContainerStyle={styles.scrollViewContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
-                     <View style={styles.containerForm}>
-                       
-                       <View style={styles.containerImage}>
-            <Image 
-              source={musico} 
-              style={[
-                styles.image, 
-                { 
-                  width: windowWidth * 0.7, 
-                  height: windowHeight * (keyboardVisible ? 0.25 : 0.35) 
-                }
-              ]} 
-            />
-          </View>
+              <View style={styles.containerForm}>
+                <View style={[styles.containerImage, isCompactScreen && styles.containerImageCompact]}>
+                  <Image
+                    source={musico}
+                    style={[
+                      styles.image,
+                      {
+                        width: windowWidth * (isCompactScreen ? 0.55 : 0.7),
+                        height: illustrationHeight,
+                      },
+                    ]}
+                  />
+                </View>
 
-          <SubTitleComponent 
-            subtitle={'Olá, futuro músico!'} 
-            color={'#A3A3A3'} 
-            FontFamily={'Roboto-Light'} 
-            MarginRight={24} 
-            MarginTop={8} 
-          />
-          <TitleComponent 
-            title={'Vamos criar sua conta?'} 
-            color={''} 
-            fontFamily={''} 
-            truncate={false}
-          />
-          <SubTitleComponent 
-            subtitle="Preencha os dados abaixo para começar sua jornada musical." 
-            color="#A3A3A3" 
-            FontFamily="Roboto-Light" 
-            MarginRight={24} 
-            MarginTop={6} 
-          />
+                <SubTitleComponent
+                  subtitle={'Olá, futuro músico!'}
+                  color={'#A3A3A3'}
+                  FontFamily={'Roboto-Light'}
+                  MarginRight={24}
+                  MarginTop={isCompactScreen ? 4 : 8}
+                />
+                <TitleComponent
+                  title={'Vamos criar sua conta?'}
+                  color={''}
+                  fontFamily={''}
+                  truncate={false}
+                />
+                <SubTitleComponent
+                  subtitle="Preencha os dados abaixo para começar sua jornada musical."
+                  color="#A3A3A3"
+                  FontFamily="Roboto-Light"
+                  MarginRight={24}
+                  MarginTop={6}
+                />
 
-          <SubTitleComponent 
-            subtitle={'Nome'} 
-            color={'#A3A3A3'} 
-            MarginTop={16} 
-            FontFamily={''} 
-            MarginRight={0} 
-          />
-          <Input 
-            onChangeText={setName}
-            placeholder={"Digite seu primeiro nome"} 
-            secureTextEntry={false} 
-            styleWidth={{ width: windowWidth * 0.85 }} 
-            value={name}
-            error={errors.name}
-            autoCapitalize="words"
-            autoCorrect={false}
-            onBlur={() => validateField('name', name)}
-          />
+                <SubTitleComponent
+                  subtitle={'Nome'}
+                  color={'#A3A3A3'}
+                  MarginTop={isCompactScreen ? 12 : 16}
+                  FontFamily={''}
+                  MarginRight={0}
+                />
+                <Input
+                  onChangeText={setName}
+                  placeholder={"Digite seu primeiro nome"}
+                  secureTextEntry={false}
+                  styleWidth={{ width: windowWidth * 0.85 }}
+                  value={name}
+                  error={errors.name}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  onBlur={() => validateField('name', name)}
+                />
 
-          <SubTitleComponent 
-            subtitle={'E-mail'} 
-            color={'#A3A3A3'} 
-            MarginTop={16} 
-            FontFamily={''} 
-            MarginRight={0} 
-          />
-          <Input 
-            onChangeText={setEmail}
-            placeholder={"Digite seu melhor e-mail"} 
-            secureTextEntry={false} 
-            styleWidth={{ width: windowWidth * 0.85 }} 
-            value={email}
-            error={errors.email}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            onBlur={() => validateField('email', email)}
-          />
+                <SubTitleComponent
+                  subtitle={'E-mail'}
+                  color={'#A3A3A3'}
+                  MarginTop={isCompactScreen ? 12 : 16}
+                  FontFamily={''}
+                  MarginRight={0}
+                />
+                <Input
+                  onChangeText={setEmail}
+                  placeholder={"Digite seu melhor e-mail"}
+                  secureTextEntry={false}
+                  styleWidth={{ width: windowWidth * 0.85 }}
+                  value={email}
+                  error={errors.email}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onBlur={() => validateField('email', email)}
+                />
 
-          <SubTitleComponent 
-            subtitle={'Senha'} 
-            color={'#A3A3A3'} 
-            MarginTop={16} 
-            FontFamily={''} 
-            MarginRight={0} 
-          />
-          <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
-            <Input 
-              onChangeText={setPassword}
-              placeholder={"Digite uma senha segura"} 
-              secureTextEntry={!showPassword} 
-              styleWidth={{ width: windowWidth * 0.85 }} 
-              value={password}
-              error={errors.password}
-              autoCapitalize="none"
-              autoCorrect={false}
-              onBlur={() => validateField('password', password)}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIconContainer}>
-              <Image
-                source={showPassword ? eyeIcon : eyeOffIcon}
-                style={styles.eyeIcon}
-              />
-            </TouchableOpacity>
-          </View>
+                <SubTitleComponent
+                  subtitle={'Senha'}
+                  color={'#A3A3A3'}
+                  MarginTop={isCompactScreen ? 12 : 16}
+                  FontFamily={''}
+                  MarginRight={0}
+                />
+                <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
+                  <Input
+                    onChangeText={setPassword}
+                    placeholder={"Digite uma senha segura"}
+                    secureTextEntry={!showPassword}
+                    styleWidth={{ width: windowWidth * 0.85 }}
+                    value={password}
+                    error={errors.password}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onBlur={() => validateField('password', password)}
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIconContainer}>
+                    <Image
+                      source={showPassword ? eyeIcon : eyeOffIcon}
+                      style={styles.eyeIcon}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-          <SubTitleComponent 
-            subtitle={'Confirmar Senha'} 
-            color={'#A3A3A3'} 
-            MarginTop={16} 
-            FontFamily={''} 
-            MarginRight={0} 
-          />
-          <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
-            <Input 
-              onChangeText={setConfirmPassword}
-              placeholder={"Digite a senha novamente"} 
-              secureTextEntry={!showConfirmPassword} 
-              styleWidth={{ width: windowWidth * 0.85 }} 
-              value={confirmPassword}
-              error={errors.confirmPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              onBlur={() => validateField('confirmPassword', confirmPassword)}
-            />
-            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIconContainer}>
-              <Image
-                source={showConfirmPassword ? eyeIcon : eyeOffIcon}
-                style={styles.eyeIcon}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <PrimaryButton 
-            onPress={handlePressSelectLevel} 
-            styleWidth={{ width: windowWidth * 0.85 }} 
-            title={'Confirmar e Continuar'}
-            loading={isLoading}
-            disabled={isLoading}
-            style={{ marginBottom: 15 }}
-          />
-
-        </View>
+                <SubTitleComponent
+                  subtitle={'Confirmar Senha'}
+                  color={'#A3A3A3'}
+                  MarginTop={isCompactScreen ? 12 : 16}
+                  FontFamily={''}
+                  MarginRight={0}
+                />
+                <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
+                  <Input
+                    onChangeText={setConfirmPassword}
+                    placeholder={"Digite a senha novamente"}
+                    secureTextEntry={!showConfirmPassword}
+                    styleWidth={{ width: windowWidth * 0.85 }}
+                    value={confirmPassword}
+                    error={errors.confirmPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onBlur={() => validateField('confirmPassword', confirmPassword)}
+                  />
+                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIconContainer}>
+                    <Image
+                      source={showConfirmPassword ? eyeIcon : eyeOffIcon}
+                      style={styles.eyeIcon}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </ScrollView>
+
+            <SafeAreaView edges={['bottom']} style={styles.footer}>
+              <PrimaryButton
+                onPress={handlePressSelectLevel}
+                styleWidth={{ width: windowWidth * 0.85 }}
+                title={'Confirmar e Continuar'}
+                loading={isLoading}
+                disabled={isLoading}
+              />
+            </SafeAreaView>
           </KeyboardAvoidingView>
         </View>
       </View>
-    </SafeAreaView>
+    </LevelScreenShell>
   );
 }
 
@@ -367,43 +364,47 @@ const styles = StyleSheet.create({
   blueContainer: {
     flex: 1,
     backgroundColor: '#0087D3',
-    height: '50%',
   },
   whiteContainer: {
     flex: 1,
     backgroundColor: 'white',
-    height: '50%',
   },
-  container: {
+  keyboardView: {
     flex: 1,
-    backgroundColor: 'white',
-    alignSelf: 'center',
   },
   scrollViewContent: {
     flexGrow: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingBottom: 20,
+    paddingBottom: 12,
   },
   containerForm: {
     backgroundColor: 'white',
     width: '100%',
     paddingHorizontal: 24,
-    paddingVertical: 20,
-    paddingBottom: 40,
-    justifyContent: 'flex-start',
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   containerImage: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: -28,
+    marginBottom: -20,
+  },
+  containerImageCompact: {
+    marginBottom: -12,
+  },
+  footer: {
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E8E8E8',
   },
   image: {
     resizeMode: 'contain',
   },
   passwordContainer: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   eyeIconContainer: {
     position: 'absolute',

@@ -103,8 +103,8 @@ const ERROR_MESSAGES: Record<string, ErrorMessage> = {
 
   // Erros de rede e servidor
   'NETWORK_ERROR': {
-    title: 'Erro de Conexão',
-    message: 'Não foi possível conectar ao servidor. Verifique se o backend está rodando e se o celular está na mesma rede Wi-Fi do PC.',
+    title: 'Sem conexão',
+    message: 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.',
     type: 'error'
   },
   'SERVER_ERROR': {
@@ -231,7 +231,9 @@ const getErrorTypeFromStatus = (status?: number): 'error' | 'warning' | 'info' =
 
 // Função principal para processar erros e retornar mensagens amigáveis
 export const processError = (error: any): ErrorMessage => {
-  console.log('🔍 Processando erro:', error);
+  if (__DEV__) {
+    console.log('Processando erro:', error?.message || error);
+  }
   
   // Extrair código de erro
   const errorCode = extractErrorCode(error);

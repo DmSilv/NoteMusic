@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import PrimaryButton from '@/shared/components/form/PrimaryButton/PrimaryButton';
 import { getLevelColors } from '@/shared/constants/theme';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 
 const steps = [
   {
@@ -57,14 +57,7 @@ export default function SelectLevelPerson({ navigation }) {
   };
 
   return (
-    <>
-      <StatusBar 
-        barStyle="light-content" 
-        backgroundColor="#0087D3" 
-        translucent={false}
-        animated={true}
-      />
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+    <LevelScreenShell>
       <View style={styles.container}>
       {/* Barra de progresso */}
       {Platform.OS === 'android' ? (
@@ -97,8 +90,7 @@ export default function SelectLevelPerson({ navigation }) {
         disabled={!answers[step]}
       />
       </View>
-    </SafeAreaView>
-    </>
+    </LevelScreenShell>
   );
 }
 

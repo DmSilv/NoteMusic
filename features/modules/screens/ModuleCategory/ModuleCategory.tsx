@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput, Alert, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import TitleComponent from '@/shared/components/form/Title/Title';
 import SubTitleComponent from '@/shared/components/form/SubTitle/SubTitle';
@@ -11,7 +14,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import moduleService, { ModuleCategory as ModuleCategoryType } from '@/services/moduleService';
 import apiService from '@/services/api';
 import { getLevelColors, getLevelIcon } from '@/shared/constants/theme';
+import MusicNoteIconBadge from '@/shared/components/ui/MusicNoteIconBadge';
 import quizCompletionService from '@/services/quizCompletionService';
+import { invalidateProgressCaches } from '@/shared/utils/userProgress';
 
 const { width } = Dimensions.get('window');
 
@@ -22,8 +27,10 @@ interface ModuleCategoryProps {
 
 const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     const { user } = useAuth();
+    const { level: themeLevel, chrome } = useLevelTheme();
     const [categories, setCategories] = useState<ModuleCategoryType[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [selectedLevel, setSelectedLevel] = useState<string>(''); // Será definido como nível do usuário após carregar dados
     const [categoryCompletion, setCategoryCompletion] = useState<any>(null);
     const [userStats, setUserStats] = useState<any>(null);
@@ -100,22 +107,57 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         value: userLevelValue
     });
 
+    const userId = user?.id;
+    const userLevel = (user?.level || 'aprendiz').toLowerCase();
+
     useEffect(() => {
-        loadUserData();
-        loadCategories();
-        
-        // Definir nível inicial do usuário ao carregar
-        if (user?.level && selectedLevel === '') {
-            const userLevel = user.level.toLowerCase();
-            console.log(`🎯 Carregando tela com nível do usuário: ${userLevel}`);
-            setSelectedLevel(userLevel);
+        console.log('🔎 [ModuleCategory] Sessão:', {
+            userId: userId ?? 'ausente',
+            userLevel,
+            hasToken: true,
+            categoriesCount: categories.length,
+            isLoading,
+        });
+
+        if (!userId) {
+            console.warn('⚠️ [ModuleCategory] userId ausente — não carrega módulos');
+            setIsLoading(false);
+            setLoadError('Faça login para ver os módulos.');
+            return;
         }
-    }, [user]);
+
+        setLoadError(null);
+        setCategories([]);
+        setUserStats(null);
+        setQuizCompletionStatus(new Map());
+        setSearchResults([]);
+        setLastLoadTime(0);
+        setSelectedLevel(userLevel);
+
+        loadUserData();
+        loadCategories(true);
+    }, [userId]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (!userId) {
+                return;
+            }
+
+            console.log('🔄 [ModuleCategory] Foco — atualizando stats e conclusão');
+            loadUserData();
+            invalidateProgressCaches();
+
+            if (categories.length > 0) {
+                validateIndividualQuizCompletion(categories);
+            }
+        }, [userId, categories.length])
+    );
 
     const loadUserData = async () => {
         try {
             if (user) {
-                const stats = await apiService.getUserStats();
+                const stats = await apiService.getUserStats(true);
                 console.log('📊 Stats carregadas no ModuleCategory:', stats);
                 setUserStats(stats);
             }
@@ -124,50 +166,43 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         }
     };
 
-    const loadCategories = async () => {
+    const loadCategories = async (forceRefresh = false) => {
         try {
-            // Verificar cache antes de carregar
             const now = Date.now();
-            if (categories.length > 0 && (now - lastLoadTime) < CACHE_DURATION) {
-                console.log('📦 Usando categorias do cache');
+            if (!forceRefresh && categories.length > 0 && (now - lastLoadTime) < CACHE_DURATION) {
+                console.log('📦 [ModuleCategory] Usando categorias do cache local');
+                setIsLoading(false);
                 return;
             }
 
             setIsLoading(true);
+            setLoadError(null);
             
-            // ⚠️ TEMPORÁRIO: Não passar nível (filtro desabilitado no service)
-            console.log(`🔍 Carregando TODAS as categorias`);
+            console.log(`🔍 [ModuleCategory] Buscando categorias (forceRefresh=${forceRefresh}, userId=${userId}, level=${userLevel})`);
             
             const moduleCategories = await moduleService.getModulesByCategory();
-            console.log('📚 CATEGORIAS CARREGADAS NO FRONTEND:');
-            console.log('Total:', moduleCategories?.length || 0);
+            console.log('📚 [ModuleCategory] Categorias recebidas:', moduleCategories?.length || 0);
             
             if (moduleCategories) {
                 moduleCategories.forEach((category, index) => {
-                    console.log(`${index + 1}. ${category.name}`);
-                    console.log(`   Módulos: ${category.modules?.length || 0}`);
-                    if (category.modules) {
-                        category.modules.forEach(module => {
-                            console.log(`     - ${module.title} (${module.level})`);
-                        });
-                    }
+                    console.log(`${index + 1}. ${category.name} — módulos: ${category.modules?.length || 0}`);
                 });
             }
             
             setCategories(moduleCategories || []);
             setLastLoadTime(now);
             
-            // Carregar conclusão de categorias
             await loadCategoryCompletion();
             
-            // Validar conclusão real de cada quiz individual
             if (moduleCategories && moduleCategories.length > 0) {
-                await validateIndividualQuizCompletion(moduleCategories);
+                validateIndividualQuizCompletion(moduleCategories);
             }
         } catch (error) {
-            console.error('❌ Erro ao carregar categorias:', error);
+            console.error('❌ [ModuleCategory] Erro ao carregar categorias:', error);
             setCategories([]);
+            setLoadError('Não foi possível carregar os módulos. Verifique sua conexão e tente novamente.');
         } finally {
+            console.log('✅ [ModuleCategory] loading=false');
             setIsLoading(false);
         }
     };
@@ -669,15 +704,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                 >
                     <View style={styles.cardHeader}>
                         <View style={styles.topRow}>
-                            {/* Ícone da nota alinhado com a seta */}
-                            {!isCategoryCompleted && (
-                                <View style={styles.containerNoteIcon}>
-                                    <Image
-                                        source={require('@/assets/images/music-note.png')}
-                                        style={[styles.image, styles.Note]}
-                                    />
-                                </View>
-                            )}
+                            {!isCategoryCompleted && <MusicNoteIconBadge />}
                             {/* Botão de informações da categoria */}
                             <TouchableOpacity 
                                 style={styles.infoButton}
@@ -741,27 +768,17 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
     }, [getCategoryLevel, getCategoryNameByLevel, isCategoryReallyCompleted, quizCompletionStatus, handlePressContentListCategory]);
 
     return (
-        <>
-            <StatusBar 
-                barStyle="light-content" 
-                backgroundColor="#0087D3" 
-                translucent={false}
-                animated={true}
-            />
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+        <LevelScreenShell level={themeLevel}>
+            <ChromeNavHeader>
+                <UserInfo useRealTimeData={true} />
+                <View style={styles.backButtoncontainer}>
+                    <BackButton onPress={handlePressProfileHome} level={themeLevel} />
+                </View>
+            </ChromeNavHeader>
             <View style={styles.container}>
             <ScrollView>
-                {/* Barra Superior */}
-                <View style={styles.header}>
-                    <UserInfo useRealTimeData={true} />
-                    <View style={styles.backButtoncontainer}>
-                        <BackButton onPress={handlePressProfileHome} />
-                    </View>
-                </View>
-
-                {/* Título e Saudação */}
                 <View style={styles.intro}>
-                    <SubTitleComponent fontFamily={'Roboto-Medium'} subtitle={'Olá seja bem-vindo,'} color={''} marginRight={''} marginTop={''} />
+                    <SubTitleComponent fontFamily={'Roboto-Medium'} subtitle={'Olá seja bem-vindo,'} color={''} marginRight={0} marginTop={0} />
                     <TitleComponent title={'Comece sua Jornada'} fontFamily={'Roboto-Bold'} color={''} fontSize={''} truncate={false} />
                 </View>
 
@@ -983,17 +1000,23 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                 <View style={styles.cardGrid}>
                     {isLoading ? (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#007AFF" />
+                            <ActivityIndicator size="large" color={chrome.primary} />
                             <Text style={styles.loadingText}>Carregando categorias...</Text>
                         </View>
-                    ) : isValidatingQuizzes ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#007AFF" />
-                            <Text style={styles.loadingText}>Validando conclusão de quizzes...</Text>
+                    ) : loadError ? (
+                        <View style={styles.emptyContainer}>
+                            <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#E57373" />
+                            <Text style={styles.emptyText}>{loadError}</Text>
+                            <TouchableOpacity
+                                onPress={() => userId && loadCategories(true)}
+                                style={styles.retryButton}
+                            >
+                                <Text style={styles.retryButtonText}>Tentar novamente</Text>
+                            </TouchableOpacity>
                         </View>
                     ) : isSearching ? (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#007AFF" />
+                            <ActivityIndicator size="large" color={chrome.primary} />
                             <Text style={styles.loadingText}>Buscando...</Text>
                         </View>
                     ) : displayCategories.length === 0 ? (
@@ -1019,23 +1042,29 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
                             )}
                         </View>
                     ) : (
-                        displayCategories
+                        <>
+                            {isValidatingQuizzes && (
+                                <View style={styles.validatingBanner}>
+                                    <ActivityIndicator size="small" color={chrome.primary} />
+                                    <Text style={styles.validatingText}>Atualizando progresso dos quizzes...</Text>
+                                </View>
+                            )}
+                            {displayCategories
                             .filter(category => category && category.name && category.modules && category.modules.length > 0)
                             .map((category, index) => {
-                                // ✅ Usar uma chave única baseada no slug da categoria + nível para evitar problemas de renderização
                                 const categorySlug = category.modules?.[0]?.category || category.name.toLowerCase().replace(/\s+/g, '-');
                                 return (
                                     <View key={`category-${categorySlug}-${selectedLevel}-${index}`} style={styles.cardWrapper}>
                                         {renderCard(category)}
                                     </View>
                                 );
-                            })
+                            })}
+                        </>
                     )}
                 </View>
             </ScrollView>
             </View>
-        </SafeAreaView>
-        </>
+        </LevelScreenShell>
     );
 }
 
@@ -1048,19 +1077,18 @@ const styles = StyleSheet.create({
         paddingBottom: 35,
     },
     header: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        padding: 20,
         width: '100%',
     },
     backButtoncontainer: {
         position: 'absolute',
         top: 'auto',
-        left: 20,
+        left: 16,
         zIndex: 10,
     },
     intro: {
-        paddingLeft: 20,
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 4,
     },
     categories: {
         paddingLeft: 20,
@@ -1269,21 +1297,8 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 2,
     },
-    containerNoteIcon: {
-        backgroundColor: '#C6E8FF',
-        padding: 4,
-        borderRadius: 6,
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 24,
-        height: 24,
-    },
     image: {
         resizeMode: 'contain',
-    },
-    Note: {
-        height: 14,
-        width: 14,
     },
     cardFooter: {
         flexDirection: 'row',
@@ -1403,6 +1418,30 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 16,
         marginBottom: 20,
+    },
+    retryButton: {
+        backgroundColor: '#FF6B35',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+    },
+    retryButtonText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontFamily: 'Poppins-Medium',
+    },
+    validatingBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+        marginBottom: 8,
+        gap: 8,
+    },
+    validatingText: {
+        fontSize: 13,
+        color: '#666',
+        fontFamily: 'Poppins-Regular',
     },
     clearSearchButton: {
         backgroundColor: '#007AFF',

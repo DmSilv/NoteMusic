@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { NavigationProp } from '@react-navigation/native';
+import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/contexts/AuthContext';
 import apiService from '@/services/api';
 import BackButton from '@/shared/components/layout/BackButton/BackButton';
@@ -35,17 +37,20 @@ interface LevelInfo {
 
 export default function LevelStats({ navigation }: LevelStatsProps) {
   const { user } = useAuth();
+  const { level: themeLevel, chrome } = useLevelTheme();
   const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadLevelInfo();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadLevelInfo();
+    }, [user?.id])
+  );
 
   const loadLevelInfo = async () => {
     try {
       setIsLoading(true);
-      const stats = await apiService.getUserStats();
+      const stats = await apiService.getUserStats(true);
       
       console.log('📊 Dados recebidos no LevelStats:', stats);
       
@@ -122,18 +127,22 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Carregando estatísticas...</Text>
-      </View>
+      <LevelScreenShell level={themeLevel}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={chrome.primary} />
+          <Text style={styles.loadingText}>Carregando estatísticas...</Text>
+        </View>
+      </LevelScreenShell>
     );
   }
 
   if (!levelInfo) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Erro ao carregar informações</Text>
-      </View>
+      <LevelScreenShell level={themeLevel}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Erro ao carregar informações</Text>
+        </View>
+      </LevelScreenShell>
     );
   }
 
@@ -143,19 +152,12 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
   const nextLevelColors = getLevelColors(levelInfo.nextLevel);
 
   return (
-    <>
-      <StatusBar 
-        barStyle="light-content" 
-        backgroundColor="#0087D3" 
-        translucent={false}
-        animated={true}
-      />
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+    <LevelScreenShell level={themeLevel}>
       <View style={styles.container}>
-      <View style={styles.header}>
-        <BackButton onPress={() => navigation.goBack()} />
-        <Text style={styles.headerTitle}>Progresso de Nível</Text>
-      </View>
+      <ChromeNavHeader variant="title">
+        <BackButton onPress={() => navigation.goBack()} level={themeLevel} />
+        <Text style={[styles.headerTitle, { color: currentLevelColors.text }]}>Progresso de Nível</Text>
+      </ChromeNavHeader>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Nível Atual */}
@@ -184,7 +186,7 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
           {/* Progresso de Módulos */}
           <View style={styles.progressItem}>
             <View style={styles.progressHeader}>
-              <MaterialCommunityIcons name="book-open-page-variant" size={20} color="#0087D3" />
+              <MaterialCommunityIcons name="book-open-page-variant" size={20} color={currentLevelColors.primary} />
               <Text style={styles.progressLabel}>Módulos Completados</Text>
             </View>
             <View style={styles.progressBarContainer}>
@@ -209,7 +211,7 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
         {levelInfo.stats && (
           <View style={styles.statsCard}>
             <View style={styles.sectionTitleContainer}>
-              <MaterialCommunityIcons name="chart-line" size={24} color="#0087D3" />
+              <MaterialCommunityIcons name="chart-line" size={24} color={currentLevelColors.primary} />
               <Text style={styles.sectionTitle}>Seu Desempenho</Text>
             </View>
             
@@ -303,28 +305,19 @@ export default function LevelStats({ navigation }: LevelStatsProps) {
         )}
       </ScrollView>
       </View>
-    </SafeAreaView>
-    </>
+    </LevelScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
+    backgroundColor: '#FFFFFF',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#232323',
-    marginLeft: 20,
+    marginLeft: 12,
   },
   content: {
     padding: 20,

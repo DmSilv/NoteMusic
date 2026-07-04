@@ -1,7 +1,6 @@
 import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, Switch } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import garota_sentada from '@/assets/images/garota_janela.png';
 import eyeIcon from '@/assets/images/eye.png'; 
@@ -14,7 +13,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import useFormValidation from '@/shared/hooks/useFormValidation';
 import useAsyncOperation from '@/shared/hooks/useAsyncOperation';
 import useErrorHandler from '@/shared/hooks/useErrorHandler';
-import useStatusBar from '@/shared/hooks/useStatusBar';
+import { processError } from '@/shared/utils/errorHandler';
+import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import { DEFAULT_LEVEL_CHROME } from '@/shared/constants/levelTheme';
 
 export default function LoginScreen({ navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -41,35 +42,21 @@ export default function LoginScreen({ navigation }: any) {
   // Hook para tratamento de erros
   const { showError } = useErrorHandler();
 
-  // Hook para personalizar StatusBar
-  useStatusBar({
-    backgroundColor: '#007AFF',
-    barStyle: 'light-content',
-    translucent: false
-  });
-
   // Verificar se há credenciais salvas
   useEffect(() => {
     const checkSavedCredentials = async () => {
       try {
         const savedEmail = await AsyncStorage.getItem('@NoteMusic:savedEmail');
-        const savedPassword = await AsyncStorage.getItem('@NoteMusic:savedPassword');
-        const autoLoginEnabled = await AsyncStorage.getItem('@NoteMusic:autoLogin');
-        
-        console.log('🔍 Verificando credenciais salvas...');
-        console.log('📝 Credenciais encontradas:', {
-          autoLogin: autoLoginEnabled ? '✅ Ativado' : '❌ Desativado',
-          email: savedEmail ? '✅ Encontrado' : '❌ Não encontrado',
-          password: savedPassword ? '✅ Encontrado' : '❌ Não encontrado'
-        });
+        const rememberEmail = await AsyncStorage.getItem('@NoteMusic:rememberEmail');
 
-        if (savedEmail && savedPassword && autoLoginEnabled === 'true') {
+        if (savedEmail && rememberEmail === 'true') {
           setValue('email', savedEmail);
-          setValue('password', savedPassword);
           setRememberMe(true);
         }
       } catch (error) {
-        console.error('Erro ao verificar credenciais salvas:', error);
+        if (__DEV__) {
+          console.error('Erro ao verificar e-mail salvo:', error);
+        }
       }
     };
 
@@ -91,8 +78,8 @@ export default function LoginScreen({ navigation }: any) {
 
   const handleClearSavedCredentials = async () => {
     Alert.alert(
-      'Remover Dados Salvos',
-      'Deseja remover seus dados de email e senha salvos? Você precisará digitar novamente na próxima vez.',
+      'Remover e-mail salvo',
+      'Deseja remover o e-mail salvo? Você precisará digitá-lo novamente na próxima vez.',
       [
         {
           text: 'Cancelar',
@@ -104,14 +91,12 @@ export default function LoginScreen({ navigation }: any) {
           onPress: async () => {
             try {
               await AsyncStorage.removeItem('@NoteMusic:savedEmail');
-              await AsyncStorage.removeItem('@NoteMusic:savedPassword');
-              await AsyncStorage.removeItem('@NoteMusic:autoLogin');
+              await AsyncStorage.removeItem('@NoteMusic:rememberEmail');
               
               setValue('email', '');
-              setValue('password', '');
               setRememberMe(false);
               
-              Alert.alert('Pronto!', 'Seus dados foram removidos. Na próxima vez você precisará digitar email e senha novamente.');
+              Alert.alert('Pronto!', 'O e-mail salvo foi removido.');
             } catch (error) {
               console.error('Erro ao limpar credenciais:', error);
               Alert.alert('Ops!', 'Não foi possível remover os dados salvos.');
@@ -143,10 +128,13 @@ export default function LoginScreen({ navigation }: any) {
         });
       }
     } catch (error: any) {
-      console.error('Erro no login:', error);
-      
-      // Tratamento de erro simples
-      Alert.alert('Erro', 'Email ou senha incorretos. Tente novamente.');
+      if (error.message === 'ACCOUNT_DEACTIVATED') {
+        navigation.navigate('DeactivatedAccount', { email: formState.email.value });
+        return;
+      }
+
+      const processed = processError(error);
+      Alert.alert(processed.title, processed.message);
     }
   };
 
@@ -166,7 +154,7 @@ export default function LoginScreen({ navigation }: any) {
   }, []);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0087D3' }}>
+    <LevelScreenShell>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -280,8 +268,8 @@ export default function LoginScreen({ navigation }: any) {
             onPress={handlePressProfile} 
             title={'Acessar'} 
             styleWidth={{ width: windowWidth * 0.85 }} 
-            loading={isLoading}
-            disabled={isLoading}
+            loading={isLoginInProgress}
+            disabled={isLoginInProgress || isLoading}
           />
           
           {/* Opção Lembrar-me - Com o botão primeiro e depois o texto */}
@@ -290,14 +278,14 @@ export default function LoginScreen({ navigation }: any) {
               value={rememberMe}
               onValueChange={setRememberMe}
               trackColor={{ false: '#D9D9D9', true: '#76B0F1' }}
-              thumbColor={rememberMe ? '#0087D3' : '#f4f3f4'}
+              thumbColor={rememberMe ? DEFAULT_LEVEL_CHROME.primary : '#f4f3f4'}
             />
             <TouchableOpacity 
               onPress={() => setRememberMe(!rememberMe)}
               activeOpacity={0.7}
               style={styles.rememberMeTextContainer}
             >
-              <Text style={styles.rememberMeText}>Lembrar-me</Text>
+              <Text style={styles.rememberMeText}>Lembrar meu e-mail</Text>
             </TouchableOpacity>
           </View>
           
@@ -331,7 +319,7 @@ export default function LoginScreen({ navigation }: any) {
         </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </LevelScreenShell>
   );
 }
 
@@ -352,7 +340,7 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    marginTop: -20,
+    marginTop: 0,
     flex: 1,
     justifyContent: 'flex-start',
     shadowColor: '#000',
