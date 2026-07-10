@@ -23,6 +23,7 @@ google-play-service-account.json
 credentials.json
 android/app/upload_certificate.pem
 *.jks
+docs/BUILD_CREDENCIAIS.md
 .gradle/
 eas-build-log*.txt
 eas-log*.txt

@@ -157,7 +157,7 @@ export default function RegisterUser({ navigation }) {
             style: 'cancel',
             onPress: () => {
               console.log('👤 Usuário escolheu não salvar credenciais');
-              navigation.navigate('SelectLevelPerson');
+              navigation.navigate('AppIntroScreen');
             }
           },
           {
@@ -178,7 +178,7 @@ export default function RegisterUser({ navigation }) {
                 console.error('❌ Erro ao salvar credenciais:', error);
                 Alert.alert('Aviso', 'Não foi possível salvar suas credenciais, mas sua conta foi criada com sucesso!');
               }
-              navigation.navigate('SelectLevelPerson');
+              navigation.navigate('AppIntroScreen');
             }
           }
         ],

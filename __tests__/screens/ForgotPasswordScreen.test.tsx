@@ -69,8 +69,30 @@ describe('ForgotPasswordScreen', () => {
       expect(Alert.alert).toHaveBeenCalledWith(
         'Verifique seu e-mail',
         expect.stringMatching(/e-mail estiver cadastrado/i),
-        expect.any(Array)
+        expect.any(Array),
+        { cancelable: false }
       );
+    });
+  });
+
+  it('mostra apenas o botão de inserir código, sem opção de voltar ao login', async () => {
+    mockForgotPassword.mockResolvedValueOnce({
+      success: true,
+      message: 'Se este e-mail estiver cadastrado, enviaremos instruções para redefinir sua senha.',
+    });
+
+    const { getByPlaceholderText, getByText } = render(
+      <ForgotPasswordScreen navigation={navigation} />
+    );
+
+    fireEvent.changeText(getByPlaceholderText('Digite seu e-mail'), 'maria@gmail.com');
+    fireEvent.press(getByText('Enviar instruções'));
+
+    await waitFor(() => {
+      const call = (Alert.alert as jest.Mock).mock.calls[0];
+      const buttons = call[2];
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].text).toBe('Inserir código');
     });
   });
 

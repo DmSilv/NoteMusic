@@ -271,6 +271,19 @@ class ApiService {
     }
   }
 
+  /**
+   * Restaura uma sessão a partir de um token já emitido (ex.: guardado no
+   * SecureStore para o login por biometria). Não faz requisição — quem chama
+   * deve validar o token em seguida (ex.: via getProfile()).
+   */
+  async restoreToken(token: string): Promise<void> {
+    await this.saveToken(token);
+  }
+
+  getCurrentToken(): string | null {
+    return this.token;
+  }
+
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
 

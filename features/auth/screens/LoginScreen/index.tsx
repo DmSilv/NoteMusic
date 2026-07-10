@@ -23,11 +23,25 @@ export default function LoginScreen({ navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const { width: windowWidth, height: windowHeight, formFieldWidth, horizontalPadding } = useResponsiveLayout();
-  const { login, user, isLoading, isLoginInProgress, loginAttempts, deactivatedAccountDetected, clearDeactivatedFlag } = useAuth();
+  const {
+    login,
+    user,
+    isLoading,
+    isLoginInProgress,
+    loginAttempts,
+    deactivatedAccountDetected,
+    clearDeactivatedFlag,
+    biometricHardwareAvailable,
+    biometricLoginEnabled,
+    biometricTypeLabel,
+    enableBiometricLogin,
+    loginWithBiometrics,
+  } = useAuth();
   
   // Estados para formulário
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isBiometricLoginInProgress, setIsBiometricLoginInProgress] = useState(false);
   
   // Hook de validação de formulário
   const { formState, errors, setValue, validateField, validateAll } = useFormValidation(
@@ -122,12 +136,41 @@ export default function LoginScreen({ navigation }: any) {
       if (result.requirePasswordChange) {
         Alert.alert('Bem-vindo!', 'Por favor, altere sua senha temporária.');
         navigation.navigate('ChangePassword');
-      } else {
+        return;
+      }
+
+      const goToProfileHome = () => {
         // Login bem-sucedido - navegar SEM alert e SEM histórico
         navigation.reset({
           index: 0,
           routes: [{ name: 'ProfileHome' }],
         });
+      };
+
+      // Oferece ativar biometria só quando o aparelho suporta e ela ainda não
+      // está ativada — evita perguntar de novo a cada login.
+      if (biometricHardwareAvailable && !biometricLoginEnabled) {
+        Alert.alert(
+          `Entrar com ${biometricTypeLabel}?`,
+          `Você pode usar ${biometricTypeLabel} para entrar mais rápido nas próximas vezes, sem digitar a senha.`,
+          [
+            { text: 'Agora não', style: 'cancel', onPress: goToProfileHome },
+            {
+              text: 'Ativar',
+              onPress: async () => {
+                try {
+                  await enableBiometricLogin();
+                } catch (biometricError: any) {
+                  Alert.alert('Ops!', biometricError.message || 'Não foi possível ativar a biometria.');
+                } finally {
+                  goToProfileHome();
+                }
+              },
+            },
+          ]
+        );
+      } else {
+        goToProfileHome();
       }
     } catch (error: any) {
       if (error.message === 'ACCOUNT_DEACTIVATED') {
@@ -137,6 +180,23 @@ export default function LoginScreen({ navigation }: any) {
 
       const processed = processError(error);
       Alert.alert(processed.title, processed.message);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    if (isBiometricLoginInProgress) return;
+
+    setIsBiometricLoginInProgress(true);
+    try {
+      await loginWithBiometrics();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'ProfileHome' }],
+      });
+    } catch (error: any) {
+      Alert.alert('Não foi possível entrar', error.message || 'Tente novamente ou use sua senha.');
+    } finally {
+      setIsBiometricLoginInProgress(false);
     }
   };
 
@@ -291,6 +351,22 @@ export default function LoginScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
           
+          {biometricHardwareAvailable && biometricLoginEnabled && (
+            <TouchableOpacity
+              onPress={handleBiometricLogin}
+              style={[styles.biometricButton, { width: formFieldWidth }]}
+              activeOpacity={0.7}
+              disabled={isBiometricLoginInProgress || isLoginInProgress}
+            >
+              <MaterialCommunityIcons name="fingerprint" size={22} color="#0087D3" />
+              <Text style={styles.biometricButtonText}>
+                {isBiometricLoginInProgress
+                  ? 'Verificando...'
+                  : `Entrar com ${biometricTypeLabel}`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.containerLine}>
             <View style={styles.line}></View>
             <View style={styles.AjustedTop}>
@@ -406,6 +482,23 @@ const styles = StyleSheet.create({
   RememberPassword: {
     alignItems: 'center',
     marginTop: 4,
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: 14,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0087D3',
+  },
+  biometricButtonText: {
+    marginLeft: 8,
+    fontSize: 15,
+    fontFamily: 'Roboto-Medium',
+    color: '#0087D3',
   },
   clearCredentialsButton: {
     position: 'absolute',

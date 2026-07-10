@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, Image, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, Image, ScrollView, Alert, Switch } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import useLevelTheme from '@/shared/hooks/useLevelTheme';
@@ -27,7 +27,17 @@ interface ModuleCategoryProps {
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const { formFieldWidth, height: windowHeight, horizontalPadding } = useResponsiveLayout();
-    const { user, logout, updateUser } = useAuth();
+    const {
+        user,
+        logout,
+        updateUser,
+        biometricHardwareAvailable,
+        biometricLoginEnabled,
+        biometricTypeLabel,
+        enableBiometricLogin,
+        disableBiometricLogin,
+    } = useAuth();
+    const [isTogglingBiometric, setIsTogglingBiometric] = useState(false);
     const { level: themeLevel } = useLevelTheme();
     const insets = useSafeAreaInsets();
     
@@ -186,6 +196,24 @@ interface ModuleCategoryProps {
             Alert.alert('Erro', error.message || 'Não foi possível atualizar a conta. Tente novamente.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleToggleBiometric = async (value: boolean) => {
+        if (isTogglingBiometric) return;
+
+        setIsTogglingBiometric(true);
+        try {
+            if (value) {
+                await enableBiometricLogin();
+                Alert.alert('Ativado!', `Agora você pode entrar usando ${biometricTypeLabel}.`);
+            } else {
+                await disableBiometricLogin();
+            }
+        } catch (error: any) {
+            Alert.alert('Ops!', error.message || 'Não foi possível atualizar a configuração de biometria.');
+        } finally {
+            setIsTogglingBiometric(false);
         }
     };
 
@@ -370,6 +398,23 @@ interface ModuleCategoryProps {
                     
                     {/* Botões de Ação - Integrados ao formulário */}
                     <View style={styles.actionsContainer}>
+                        {/* Ativar/desativar login por biometria */}
+                        {biometricHardwareAvailable && (
+                            <View style={styles.actionButton}>
+                                <MaterialCommunityIcons name="fingerprint" size={22} color="#666" />
+                                <Text style={styles.actionButtonText}>
+                                    Entrar com {biometricTypeLabel}
+                                </Text>
+                                <Switch
+                                    value={biometricLoginEnabled}
+                                    onValueChange={handleToggleBiometric}
+                                    disabled={isTogglingBiometric}
+                                    trackColor={{ false: '#D9D9D9', true: '#76B0F1' }}
+                                    thumbColor={biometricLoginEnabled ? '#0087D3' : '#f4f3f4'}
+                                />
+                            </View>
+                        )}
+
                         {/* Botão Sair - Integrado */}
                         <TouchableOpacity 
                             style={styles.actionButton}

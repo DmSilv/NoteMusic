@@ -5,6 +5,7 @@ export const ROUTES = {
   RemenberPassword: 'RemenberPassword',
   ResetPassword: 'ResetPassword',
   SelectLevelPerson: 'SelectLevelPerson',
+  AppIntroScreen: 'AppIntroScreen',
   ProfileHome: 'ProfileHome',
   ProfileAccount: 'ProfileAccount',
   ModuleCategory: 'ModuleCategory',

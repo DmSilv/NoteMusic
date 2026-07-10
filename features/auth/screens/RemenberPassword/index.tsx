@@ -50,6 +50,9 @@ export default function ForgotPasswordScreen({ navigation }: any) {
     try {
       const response = await apiService.forgotPassword(email);
 
+      // Único botão, propositalmente: o objetivo é levar o usuário direto para
+      // digitar o código recebido, não dar a opção de "escapar" de volta pro
+      // login (o que não fazia sentido nesse ponto do fluxo de recuperação).
       Alert.alert(
         'Verifique seu e-mail',
         response.message ||
@@ -60,12 +63,8 @@ export default function ForgotPasswordScreen({ navigation }: any) {
             onPress: () =>
               navigation.navigate('ResetPassword', { email: email.trim().toLowerCase() }),
           },
-          {
-            text: 'Voltar ao login',
-            style: 'cancel',
-            onPress: () => navigation.navigate('LoginScreen'),
-          },
-        ]
+        ],
+        { cancelable: false }
       );
     } catch (error: any) {
       const processed = processError(error);

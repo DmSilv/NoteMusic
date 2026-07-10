@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService, { User, LoginData, RegisterData, UpdateUserData, normalizeUser } from '@/services/api';
 import { processError } from '@/shared/utils/errorHandler';
 import { clearUserSessionCache } from '@/shared/utils/sessionCache';
+import * as biometricAuth from '@/shared/services/biometricAuth';
 
 function devLog(...args: unknown[]) {
   if (__DEV__) {
@@ -25,6 +26,13 @@ interface AuthContextType {
   changeTempPassword: (currentPassword: string, newPassword: string) => Promise<void>;
   checkAccountStatus: () => Promise<{ isDeactivated: boolean; deletionInfo?: any }>;
   clearDeactivatedFlag: () => void; // ADDED
+  // Biometria
+  biometricHardwareAvailable: boolean;
+  biometricLoginEnabled: boolean;
+  biometricTypeLabel: string;
+  enableBiometricLogin: () => Promise<void>;
+  disableBiometricLogin: () => Promise<void>;
+  loginWithBiometrics: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,10 +56,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loginAttempts, setLoginAttempts] = useState<number>(0);
   const [isLoginInProgress, setIsLoginInProgress] = useState<boolean>(false);
   const [deactivatedAccountDetected, setDeactivatedAccountDetected] = useState<boolean>(false); // ADDED
+  const [biometricHardwareAvailable, setBiometricHardwareAvailable] = useState<boolean>(false);
+  const [biometricLoginEnabled, setBiometricLoginEnabled] = useState<boolean>(false);
+  const [biometricTypeLabel, setBiometricTypeLabel] = useState<string>('biometria');
 
   useEffect(() => {
     loadUserFromStorage();
+    loadBiometricStatus();
   }, []);
+
+  const loadBiometricStatus = async () => {
+    try {
+      const [hardwareAvailable, loginEnabled, typeLabel] = await Promise.all([
+        biometricAuth.isBiometricHardwareAvailable(),
+        biometricAuth.isBiometricLoginEnabled(),
+        biometricAuth.getBiometricTypeLabel(),
+      ]);
+      setBiometricHardwareAvailable(hardwareAvailable);
+      setBiometricLoginEnabled(loginEnabled);
+      setBiometricTypeLabel(typeLabel);
+      devLog('🔐 Status de biometria:', { hardwareAvailable, loginEnabled, typeLabel });
+    } catch (error) {
+      if (__DEV__) {
+        console.error('Erro ao carregar status de biometria:', error);
+      }
+    }
+  };
 
   const loadUserFromStorage = async () => {
     try {
@@ -217,6 +247,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await clearUserSessionCache();
       await AsyncStorage.removeItem('@NoteMusic:user');
       await AsyncStorage.removeItem('@NoteMusic:token');
+      await biometricAuth.disableBiometricLogin();
+      setBiometricLoginEnabled(false);
       setUser(null);
       setLoginAttempts(0);
       setIsLoginInProgress(false);
@@ -289,6 +321,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setDeactivatedAccountDetected(false);
   };
 
+  const enableBiometricLogin = async () => {
+    const token = apiService.getCurrentToken();
+    if (!token) {
+      throw new Error('Faça login novamente antes de ativar a biometria.');
+    }
+
+    try {
+      await biometricAuth.enableBiometricLogin(token);
+      setBiometricLoginEnabled(true);
+    } catch (error) {
+      if (__DEV__) {
+        console.error('Erro ao ativar biometria:', error);
+      }
+      throw new Error('Não foi possível ativar o login por biometria neste aparelho.');
+    }
+  };
+
+  const disableBiometricLogin = async () => {
+    await biometricAuth.disableBiometricLogin();
+    setBiometricLoginEnabled(false);
+  };
+
+  const loginWithBiometrics = async () => {
+    const hardwareAvailable = await biometricAuth.isBiometricHardwareAvailable();
+    if (!hardwareAvailable) {
+      throw new Error('Biometria não disponível neste aparelho.');
+    }
+
+    const storedToken = await biometricAuth.getStoredBiometricToken();
+    if (!storedToken) {
+      throw new Error('Nenhuma sessão salva. Faça login com e-mail e senha.');
+    }
+
+    const authenticated = await biometricAuth.promptBiometricAuthentication(
+      'Confirme sua identidade para entrar no NoteMusic'
+    );
+    if (!authenticated) {
+      throw new Error('Não foi possível confirmar sua identidade.');
+    }
+
+    try {
+      await apiService.restoreToken(storedToken);
+      const currentUser = await apiService.getProfile();
+      setUser(currentUser);
+      await AsyncStorage.setItem('@NoteMusic:user', JSON.stringify(currentUser));
+    } catch (error: any) {
+      // Token salvo expirou/foi revogado — desativa a biometria para não ficar
+      // pedindo pro usuário confirmar a digital sempre e nunca conseguir entrar.
+      await biometricAuth.disableBiometricLogin();
+      setBiometricLoginEnabled(false);
+      const processedError = processError(error);
+      throw new Error(
+        processedError.message || 'Sua sessão salva expirou. Faça login com e-mail e senha.'
+      );
+    }
+  };
+
   const value = {
     user,
     isLoading,
@@ -304,6 +393,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     changeTempPassword,
     checkAccountStatus,
     clearDeactivatedFlag, // ADDED
+    biometricHardwareAvailable,
+    biometricLoginEnabled,
+    biometricTypeLabel,
+    enableBiometricLogin,
+    disableBiometricLogin,
+    loginWithBiometrics,
   };
 
   return (

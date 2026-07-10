@@ -78,7 +78,12 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
   };
 
   const handlePressRegister = () => {
-    navigation.navigate('RegisterUser');
+    // TODO(teste-temporario): redirecionamento direto para as telas de
+    // apresentação do app (AppIntroScreen), pulando o formulário de
+    // cadastro, apenas para facilitar os testes dessa nova sequência.
+    // Restaurar para navigation.navigate('RegisterUser') quando os testes
+    // terminarem — o formulário original não foi removido.
+    navigation.navigate('AppIntroScreen');
   };
 
   const heightLogoImage = getLogoNameHeight(windowHeight);

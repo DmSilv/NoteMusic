@@ -10,6 +10,23 @@ export interface ValidationRule {
   custom?: (value: string) => string | null;
 }
 
+// Nomes de campo (chaves em inglês usadas no código) traduzidos para um rótulo
+// descritivo em português, com artigo e gênero, para montar mensagens de erro
+// naturais (em vez de expor a chave crua, ex.: "confirmPassword é obrigatório").
+const FIELD_LABELS: { [key: string]: { label: string; article: 'o' | 'a' } } = {
+  email: { label: 'e-mail', article: 'o' },
+  name: { label: 'nome', article: 'o' },
+  password: { label: 'senha', article: 'a' },
+  currentPassword: { label: 'senha atual', article: 'a' },
+  newPassword: { label: 'nova senha', article: 'a' },
+  confirmPassword: { label: 'confirmação de senha', article: 'a' },
+  resetCode: { label: 'código de verificação', article: 'o' },
+};
+
+function getFieldInfo(field: string): { label: string; article: 'o' | 'a' } {
+  return FIELD_LABELS[field] || { label: field, article: 'o' };
+}
+
 export interface FormField {
   value: string;
   error: string;
@@ -58,22 +75,24 @@ const useFormValidation = (
     if (!rules) return true;
 
     let error = '';
+    const { label, article } = getFieldInfo(field);
+    const genderSuffix = article === 'a' ? 'a' : 'o';
 
     // Verificar se é obrigatório
     if (rules.required && !value.trim()) {
-      error = `${field} é obrigatório`;
+      error = `Informe ${article} ${label}`;
     }
     // Verificar comprimento mínimo
     else if (rules.minLength && value.length < rules.minLength) {
-      error = `${field} deve ter pelo menos ${rules.minLength} caracteres`;
+      error = `${article === 'a' ? 'A' : 'O'} ${label} deve ter pelo menos ${rules.minLength} caracteres`;
     }
     // Verificar comprimento máximo
     else if (rules.maxLength && value.length > rules.maxLength) {
-      error = `${field} deve ter no máximo ${rules.maxLength} caracteres`;
+      error = `${article === 'a' ? 'A' : 'O'} ${label} deve ter no máximo ${rules.maxLength} caracteres`;
     }
     // Verificar padrão
     else if (rules.pattern && !rules.pattern.test(value)) {
-      error = `${field} inválido`;
+      error = `${article === 'a' ? 'A' : 'O'} ${label} informad${genderSuffix} é inválid${genderSuffix}`;
     }
     // ✅ Verificar email com validação de domínio
     else if (rules.email) {

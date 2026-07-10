@@ -7,6 +7,7 @@ export type RootStackParamList = {
   [ROUTES.RemenberPassword]: undefined;
   [ROUTES.ResetPassword]: { email?: string } | undefined;
   [ROUTES.SelectLevelPerson]: undefined;
+  [ROUTES.AppIntroScreen]: undefined;
   [ROUTES.ProfileHome]: undefined;
   [ROUTES.ProfileAccount]: undefined;
   [ROUTES.ModuleCategory]: undefined;

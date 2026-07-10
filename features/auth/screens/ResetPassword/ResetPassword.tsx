@@ -1,6 +1,7 @@
 import {
   StyleSheet,
   View,
+  Text,
   TouchableOpacity,
   Keyboard,
   KeyboardAvoidingView,
@@ -15,6 +16,7 @@ import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import garota_sentada from '@/assets/images/autenticacao.png';
 import eyeIcon from '@/assets/images/eye.png';
 import eyeOffIcon from '@/assets/images/eye-off.png';
+import clockIcon from '@/assets/images/clock.png';
 import TitleComponent from '@/shared/components/form/Title/Title';
 import SubTitleComponent from '@/shared/components/form/SubTitle/SubTitle';
 import Input from '@/shared/components/form/Input/Input';
@@ -23,10 +25,21 @@ import apiService from '@/services/api';
 import useFormValidation from '@/shared/hooks/useFormValidation';
 import useAsyncOperation from '@/shared/hooks/useAsyncOperation';
 import { processError } from '@/shared/utils/errorHandler';
+import { validateEmail } from '@/shared/utils/validation';
 
 interface ResetPasswordProps {
   navigation: any;
   route?: { params?: { email?: string } };
+}
+
+// Evita reenvios em sequência (o backend já limita a 5/hora, isso aqui é só
+// para não deixar o usuário martelar o botão sem perceber que já enviou).
+const RESEND_COOLDOWN_SECONDS = 60;
+
+function formatCooldown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export default function ResetPasswordScreen({ navigation, route }: ResetPasswordProps) {
@@ -34,8 +47,15 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { isLoading, execute } = useAsyncOperation();
+  // Mesma fórmula usada no Input (Style.js) para a altura do campo. Precisamos
+  // desse valor aqui para alinhar os elementos sobrepostos (olho/reenviar) só
+  // com a altura do input, e não com a altura total do wrapper — que cresce
+  // quando a mensagem de erro aparece abaixo do campo.
+  const inputFieldHeight = Math.max(48, windowHeight * 0.06);
 
   const { formState, errors, setValue, validateField, validateAll } = useFormValidation(
     {
@@ -93,6 +113,46 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
       Alert.alert(processed.title, processed.message);
     }
   };
+
+  const handleResendCode = async () => {
+    if (isResending || resendCooldown > 0) {
+      return;
+    }
+
+    const email = formState.email.value.trim().toLowerCase();
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      validateField('email');
+      Alert.alert('E-mail inválido', 'Confirme o e-mail acima antes de reenviar o código.');
+      return;
+    }
+
+    setIsResending(true);
+    try {
+      const response = await apiService.forgotPassword(email);
+      Alert.alert(
+        'Código reenviado',
+        response.message ||
+          'Se este e-mail estiver cadastrado, enviaremos um novo código para redefinir sua senha.'
+      );
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (error: any) {
+      const processed = processError(error);
+      Alert.alert(processed.title, processed.message);
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setResendCooldown((current) => (current > 0 ? current - 1 : 0));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -183,17 +243,40 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
               fontFamily={''}
               marginRight={0}
             />
-            <Input
-              onChangeText={(text) => setValue('resetCode', text.replace(/\D/g, '').slice(0, 6))}
-              value={formState.resetCode.value}
-              placeholder={'000000'}
-              secureTextEntry={false}
-              styleWidth={{ width: windowWidth * 0.85 }}
-              error={errors.resetCode}
-              keyboardType="number-pad"
-              maxLength={6}
-              onBlur={() => validateField('resetCode')}
-            />
+            <View style={[styles.resendCodeContainer, { width: windowWidth * 0.85 }]}>
+              <Input
+                onChangeText={(text) => setValue('resetCode', text.replace(/\D/g, '').slice(0, 6))}
+                value={formState.resetCode.value}
+                placeholder={'000000'}
+                secureTextEntry={false}
+                styleWidth={{ width: windowWidth * 0.85 }}
+                error={errors.resetCode}
+                keyboardType="number-pad"
+                maxLength={6}
+                onBlur={() => validateField('resetCode')}
+              />
+
+              {resendCooldown > 0 ? (
+                <View style={[styles.resendInsideButton, { height: inputFieldHeight }]}>
+                  <Image source={clockIcon} style={styles.resendClockIcon} />
+                  <Text style={styles.resendInsideCountdownText}>
+                    {formatCooldown(resendCooldown)}
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={handleResendCode}
+                  disabled={isResending}
+                  activeOpacity={0.7}
+                  style={[styles.resendInsideButton, { height: inputFieldHeight }]}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.resendInsideButtonText} numberOfLines={1}>
+                    {isResending ? 'Enviando...' : 'Reenviar'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             <SubTitleComponent
               subtitle={'Nova senha'}
@@ -215,7 +298,7 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
               />
               <TouchableOpacity
                 onPress={() => setShowNewPassword(!showNewPassword)}
-                style={styles.eyeIconContainer}
+                style={[styles.eyeIconContainer, { height: inputFieldHeight }]}
               >
                 <Image
                   source={showNewPassword ? eyeIcon : eyeOffIcon}
@@ -244,7 +327,7 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
               />
               <TouchableOpacity
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={styles.eyeIconContainer}
+                style={[styles.eyeIconContainer, { height: inputFieldHeight }]}
               >
                 <Image
                   source={showConfirmPassword ? eyeIcon : eyeOffIcon}
@@ -295,10 +378,39 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: 8,
   },
+  resendCodeContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  resendInsideButton: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 8,
+  },
+  resendInsideButtonText: {
+    fontSize: 13,
+    fontFamily: 'Roboto-Medium',
+    color: '#0087D3',
+  },
+  resendInsideCountdownText: {
+    fontSize: 13,
+    fontFamily: 'Roboto',
+    color: '#A3A3A3',
+  },
+  resendClockIcon: {
+    width: 13,
+    height: 13,
+    marginRight: 4,
+    tintColor: '#A3A3A3',
+    resizeMode: 'contain',
+  },
   eyeIconContainer: {
     position: 'absolute',
     right: 10,
-    height: '100%',
+    top: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
