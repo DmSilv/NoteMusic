@@ -1,7 +1,9 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, Image, ScrollView, Alert } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import useLevelTheme from '@/shared/hooks/useLevelTheme';
+import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
+import { getProfileImageHeight } from '@/shared/constants/responsive';
 import eyeIcon from '@/assets/images/eye.png';
 import eyeOffIcon from '@/assets/images/eye-off.png';
 import TitleComponent from '@/shared/components/form/Title/Title';
@@ -24,7 +26,7 @@ interface ModuleCategoryProps {
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
-    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+    const { formFieldWidth, height: windowHeight, horizontalPadding } = useResponsiveLayout();
     const { user, logout, updateUser } = useAuth();
     const { level: themeLevel } = useLevelTheme();
     const insets = useSafeAreaInsets();
@@ -293,10 +295,10 @@ interface ModuleCategoryProps {
                 ]}
                 keyboardShouldPersistTaps="handled"
             >
-                <View style={[styles.containerForm, { marginTop: calculateMarginTop(), borderTopLeftRadius: keyboardVisible ? 0 : 40, borderTopRightRadius: keyboardVisible ? 0 : 40 }]}>
+                <View style={[styles.containerForm, { marginTop: calculateMarginTop(), paddingHorizontal: horizontalPadding, borderTopLeftRadius: keyboardVisible ? 0 : 40, borderTopRightRadius: keyboardVisible ? 0 : 40 }]}>
                   
                     <View style={styles.containerImage}>
-                        <Image source={EditAccount} style={styles.image} />
+                        <Image source={EditAccount} style={[styles.image, { height: getProfileImageHeight(windowHeight) }]} />
                     </View>
                     <TitleComponent color={''} fontFamily={''} title={'Gerenciar Conta'} fontSize={''} truncate={false} />
                     <SubTitleComponent subtitle={'Preencha apenas os campos que deseja alterar na sua conta.'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
@@ -312,7 +314,7 @@ interface ModuleCategoryProps {
                         onChangeText={(text) => handleInputChange('name', text)} 
                         placeholder={'Digite apenas seu primeiro nome (máx. 15 caracteres)'} 
                         secureTextEntry={false} 
-                        styleWidth={{ width: windowWidth * 0.85 }}
+                        styleWidth={{ width: formFieldWidth }}
                         value={formData.name}
                         error={errors.name}
                         maxLength={15}
@@ -323,13 +325,13 @@ interface ModuleCategoryProps {
                         onChangeText={(text) => handleInputChange('email', text)} 
                         placeholder={'Digite seu e-mail'} 
                         secureTextEntry={false} 
-                        styleWidth={{ width: windowWidth * 0.85 }}
+                        styleWidth={{ width: formFieldWidth }}
                         value={formData.email}
                         error={errors.email}
                     />
 
                     <SubTitleComponent subtitle={'Senha Antiga'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
-                    <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
+                    <View style={[styles.passwordContainer, { width: formFieldWidth }]}>
                         <Input 
                             onChangeText={(text) => handleInputChange('currentPassword', text)} 
                             placeholder={'Digite sua senha atual'} 
@@ -344,7 +346,7 @@ interface ModuleCategoryProps {
                     </View>
 
                     <SubTitleComponent subtitle={'Nova Senha'} fontFamily={'Roboto-Light'}  color={''} marginRight={''} marginTop={''}/>
-                    <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
+                    <View style={[styles.passwordContainer, { width: formFieldWidth }]}>
                         <Input 
                             onChangeText={(text) => handleInputChange('newPassword', text)} 
                             placeholder={'Crie uma nova senha'} 
@@ -360,7 +362,7 @@ interface ModuleCategoryProps {
 
                     <PrimaryButton 
                         onPress={handleUpdateAccount} 
-                        styleWidth={{ width: windowWidth * 0.85 }} 
+                        styleWidth={{ width: formFieldWidth }} 
                         title={hasChanges() ? 'Atualizar Conta' : 'Nenhuma alteração'}
                         loading={isLoading}
                         disabled={isLoading || !hasChanges()}
@@ -457,7 +459,6 @@ const styles = StyleSheet.create({
     },
     image: {
         width: '100%',
-        height: 270,
         resizeMode: 'contain',
     },
     infoContainer: {

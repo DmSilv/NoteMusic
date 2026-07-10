@@ -45,15 +45,15 @@ const UserInfo: React.FC<UserInfoProps> = ({
                 fontFamily={'Roboto-Light'} 
                 subtitle={displayLevel} 
                 color={subtitleColor} 
-                marginRight={''} 
-                marginTop={''}
+                marginRight={0} 
+                marginTop={0}
             />
             <View style={[styles.line, { backgroundColor: lineColor }]} />
             <TitleComponent 
                 title={displayName} 
                 fontFamily={'Roboto-Bold'}  
                 color={titleColor} 
-                fontSize={''}
+                MarginTop={0}
             />
             {showErrorIndicator && (
                 <View style={[styles.errorIndicator, { backgroundColor: badgeColor }]}>

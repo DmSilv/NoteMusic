@@ -1,13 +1,25 @@
 import React from 'react';
-import { TouchableOpacity, Text } from 'react-native';
-import styles from './Style'; // Importando o estilo
+import { TouchableOpacity, Text, ViewStyle } from 'react-native';
+import styles from './Style';
 
-const ButtonComponent = ({ title, onPress, styleWidth }) => {
+type SecondaryButtonProps = {
+  title: string;
+  onPress: () => void;
+  styleWidth?: ViewStyle;
+};
+
+const SecondaryButton: React.FC<SecondaryButtonProps> = ({ title, onPress, styleWidth }) => {
   return (
-    <TouchableOpacity style={styles.button} onPress={onPress}>
-      <Text style={[styles.buttonText, styleWidth]}>{title}</Text>
+    <TouchableOpacity
+      style={[styles.button, styleWidth]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <Text style={styles.buttonText} numberOfLines={1}>
+        {title}
+      </Text>
     </TouchableOpacity>
   );
 };
 
-export default ButtonComponent;
+export default SecondaryButton;

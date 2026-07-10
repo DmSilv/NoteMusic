@@ -1,6 +1,8 @@
 import React from 'react';
 import { TouchableOpacity, Text, ViewStyle, TextStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
+import { MIN_TOUCH_TARGET } from '@/shared/constants/responsive';
 import styles from './Style';
 
 interface PrimaryButtonProps {
@@ -24,10 +26,17 @@ const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   loading = false,
   iconName,
 }) => {
+  const { isCompactHeight } = useResponsiveLayout();
+
   return (
     <TouchableOpacity
       style={[
         styles.button,
+        {
+          minHeight: MIN_TOUCH_TARGET,
+          marginTop: isCompactHeight ? 16 : 32,
+          marginBottom: isCompactHeight ? 8 : 12,
+        },
         disabled && styles.buttonDisabled,
         styleWidth,
         style,

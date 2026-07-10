@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PrimaryButton from '@/shared/components/form/PrimaryButton/PrimaryButton';
+import ScreenScrollContainer from '@/shared/components/layout/ScreenScrollContainer';
 import { getLevelColors } from '@/shared/constants/theme';
+import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 
 const steps = [
@@ -38,6 +41,8 @@ const steps = [
 export default function SelectLevelPerson({ navigation }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
+  const insets = useSafeAreaInsets();
+  const { horizontalPadding, formFieldWidth, isCompactHeight } = useResponsiveLayout();
   
   // Cores baseadas no nível padrão (aprendiz)
   const levelColors = getLevelColors('aprendiz');
@@ -58,44 +63,56 @@ export default function SelectLevelPerson({ navigation }) {
 
   return (
     <LevelScreenShell>
-      <View style={styles.container}>
-      {/* Barra de progresso */}
-      {Platform.OS === 'android' ? (
-        <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBar, { width: `${((step + 1) / steps.length) * 100}%`, backgroundColor: levelColors.primary }]} />
-        </View>
-      ) : null}
-      <Text style={[styles.stepText, { color: levelColors.primary }]}>Passo {step + 1} de {steps.length}</Text>
-      <Text style={styles.question}>{steps[step].question}</Text>
-      {steps[step].options.map(option => (
-        <TouchableOpacity
-          key={option}
-          style={[
-            styles.option,
-            { backgroundColor: levelColors.secondary },
-            answers[step] === option && { 
-              borderWidth: 2, 
-              borderColor: levelColors.primary, 
-              backgroundColor: levelColors.accent 
-            },
-          ]}
-          onPress={() => handleSelect(option)}
-        >
-          <Text style={styles.optionText}>{option}</Text>
-        </TouchableOpacity>
-      ))}
-      <PrimaryButton
-        title={step < steps.length - 1 ? 'Próximo' : 'Finalizar'}
-        onPress={handleNext}
-        disabled={!answers[step]}
-      />
-      </View>
+      <ScreenScrollContainer
+        bottomInset={insets.bottom}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingHorizontal: horizontalPadding },
+        ]}
+      >
+        {Platform.OS === 'android' ? (
+          <View style={styles.progressBarContainer}>
+            <View style={[styles.progressBar, { width: `${((step + 1) / steps.length) * 100}%`, backgroundColor: levelColors.primary }]} />
+          </View>
+        ) : null}
+        <Text style={[styles.stepText, { color: levelColors.primary }]}>Passo {step + 1} de {steps.length}</Text>
+        <Text style={[styles.question, isCompactHeight && styles.questionCompact]}>{steps[step].question}</Text>
+        {steps[step].options.map(option => (
+          <TouchableOpacity
+            key={option}
+            style={[
+              styles.option,
+              { backgroundColor: levelColors.secondary },
+              answers[step] === option && { 
+                borderWidth: 2, 
+                borderColor: levelColors.primary, 
+                backgroundColor: levelColors.accent 
+              },
+            ]}
+            onPress={() => handleSelect(option)}
+          >
+            <Text style={styles.optionText}>{option}</Text>
+          </TouchableOpacity>
+        ))}
+        <PrimaryButton
+          title={step < steps.length - 1 ? 'Próximo' : 'Finalizar'}
+          onPress={handleNext}
+          disabled={!answers[step]}
+          styleWidth={{ width: formFieldWidth, alignSelf: 'center' }}
+        />
+      </ScreenScrollContainer>
     </LevelScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#F8F9FA' },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 24,
+    paddingBottom: 24,
+    justifyContent: 'center',
+    backgroundColor: '#F8F9FA',
+  },
   progressBarContainer: {
     height: 8,
     width: '100%',
@@ -111,7 +128,8 @@ const styles = StyleSheet.create({
   },
   stepText: { color: '#0087D3', fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
   question: { fontSize: 20, fontWeight: 'bold', marginBottom: 18, color: '#232323' },
-  option: { backgroundColor: '#E3F2FD', borderRadius: 12, padding: 16, marginBottom: 10 },
+  questionCompact: { fontSize: 18, marginBottom: 14 },
+  option: { backgroundColor: '#E3F2FD', borderRadius: 12, padding: 16, marginBottom: 10, flexShrink: 1 },
   optionSelected: { borderWidth: 2, borderColor: '#0087D3', backgroundColor: '#BBDEFB' },
   optionText: { fontSize: 16, color: '#232323' },
 });

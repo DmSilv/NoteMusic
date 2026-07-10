@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert, Switch } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Image, Alert, Switch } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,12 +15,14 @@ import useAsyncOperation from '@/shared/hooks/useAsyncOperation';
 import useErrorHandler from '@/shared/hooks/useErrorHandler';
 import { processError } from '@/shared/utils/errorHandler';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
+import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
+import { getIllustrationHeight } from '@/shared/constants/responsive';
 import { DEFAULT_LEVEL_CHROME } from '@/shared/constants/levelTheme';
 
 export default function LoginScreen({ navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight, formFieldWidth, horizontalPadding } = useResponsiveLayout();
   const { login, user, isLoading, isLoginInProgress, loginAttempts, deactivatedAccountDetected, clearDeactivatedFlag } = useAuth();
   
   // Estados para formulário
@@ -173,13 +175,13 @@ export default function LoginScreen({ navigation }: any) {
               styles.image, 
               { 
                 width: windowWidth * 0.95, 
-                height: windowHeight * (keyboardVisible ? 0.22 : 0.32) 
+                height: getIllustrationHeight(windowHeight, { keyboard: keyboardVisible, compactRatio: 0.22, normalRatio: 0.32 }),
               }
             ]} 
           />
         </View>
 
-        <View style={styles.containerForm}>
+        <View style={[styles.containerForm, { paddingHorizontal: horizontalPadding }]}>
           {/* Botão discreto para limpar credenciais */}
           {rememberMe && (
             <TouchableOpacity 
@@ -228,7 +230,7 @@ export default function LoginScreen({ navigation }: any) {
             onChangeText={(text) => setValue('email', text)}
             placeholder={"Digite seu melhor e-mail"} 
             secureTextEntry={false} 
-            styleWidth={{ width: windowWidth * 0.85 }} 
+            styleWidth={{ width: formFieldWidth }} 
             value={formState.email.value}
             error={errors.email}
             keyboardType="email-address"
@@ -244,12 +246,12 @@ export default function LoginScreen({ navigation }: any) {
             fontFamily={''} 
             marginRight={0} 
           />
-          <View style={[styles.passwordContainer, { width: windowWidth * 0.85 }]}>
+          <View style={[styles.passwordContainer, { width: formFieldWidth }]}>
             <Input 
               onChangeText={(text) => setValue('password', text)}
               placeholder={"Digite sua senha"} 
               secureTextEntry={!showPassword} 
-              styleWidth={{ width: windowWidth * 0.85 }} 
+              styleWidth={{ width: formFieldWidth }} 
               value={formState.password.value}
               error={errors.password}
               autoCapitalize="none"
@@ -267,7 +269,7 @@ export default function LoginScreen({ navigation }: any) {
           <PrimaryButton 
             onPress={handlePressProfile} 
             title={'Acessar'} 
-            styleWidth={{ width: windowWidth * 0.85 }} 
+            styleWidth={{ width: formFieldWidth }} 
             loading={isLoginInProgress}
             disabled={isLoginInProgress || isLoading}
           />
@@ -338,7 +340,6 @@ const styles = StyleSheet.create({
   containerForm: {
     backgroundColor: 'white',
     width: '100%',
-    paddingHorizontal: 24,
     paddingVertical: 10,
     marginTop: 0,
     flex: 1,

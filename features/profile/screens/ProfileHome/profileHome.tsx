@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Animated, BackHandler, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, BackHandler, Alert, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import MenuBottom, { getMenuBottomHeight } from '@/shared/components/layout/MenuBottom';
@@ -12,6 +12,7 @@ import moduleService from '@/services/moduleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats } from '@/shared/types/UserStats';
 import { getLevelColors } from '@/shared/constants/theme';
+import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
 
 // ✅ INTERFACE PARA CONTROLE DE DESAFIO DIÁRIO
 interface DailyChallengeStatus {
@@ -23,15 +24,12 @@ interface DailyChallengeStatus {
 }
 
 
-const { width } = Dimensions.get('window');
-const CARD_MAX_WIDTH = 120;
-
 function getGreeting(userStats: UserStats | any): string {
   const hour = new Date().getHours();
   const streak = userStats?.streak || 0;
   if (streak >= 7) return 'Parabéns pela sequência!';
-  if (hour < 12) return 'Bom dia,';
-  if (hour < 18) return 'Boa tarde,';
+  if (hour >= 5 && hour < 12) return 'Bom dia,';
+  if (hour >= 12 && hour < 18) return 'Boa tarde,';
   return 'Boa noite,';
 }
 
@@ -146,6 +144,7 @@ interface ProfileHomeProps {
 export default function ProfileHome({ navigation }: ProfileHomeProps) {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
+  const { isCompact, horizontalPadding, isCompactHeight } = useResponsiveLayout();
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [moduleProgress, setModuleProgress] = useState<any>(null);
@@ -667,7 +666,11 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         style={{ flex: 1, backgroundColor: chrome.screenContentBackground }}
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: getMenuBottomHeight(insets.bottom) },
+          {
+            paddingHorizontal: horizontalPadding,
+            paddingTop: isCompactHeight ? 24 : 40,
+            paddingBottom: getMenuBottomHeight(insets.bottom),
+          },
         ]} 
         showsVerticalScrollIndicator={false}
       >
@@ -688,20 +691,26 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             </TouchableOpacity>
           </Animated.View>
           <View style={styles.userTextBlock}>
-            <Text style={[styles.greeting, { color: chrome.primary }]}>
-              {greeting} <Text style={styles.username}>{user?.name || "Usuário"}</Text>
+            <Text
+              style={[styles.greeting, { color: chrome.primary }]}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {greeting}{' '}
+              <Text style={styles.username}>{user?.name || 'Usuário'}</Text>
             </Text>
           </View>
         </View>
 
         {/* Cards de evolução */}
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, isCompact && styles.statsRowCompact]}>
           {stats.map((stat, idx) => (
-            <View key={idx} style={[styles.statCard, { borderTopColor: stat.color }]}> 
-              <MaterialCommunityIcons name={stat.icon} size={32} color={stat.color} style={{ marginBottom: 8 }} />
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-              <Text style={styles.statDesc}>{stat.description}</Text>
+            <View key={idx} style={[styles.statCard, isCompact && styles.statCardCompact, { borderTopColor: stat.color }]}> 
+              <MaterialCommunityIcons name={stat.icon} size={isCompact ? 26 : 32} color={stat.color} style={{ marginBottom: isCompact ? 4 : 8 }} />
+              <Text style={[styles.statValue, isCompact && styles.statValueCompact]}>{stat.value}</Text>
+              <Text style={[styles.statLabel, isCompact && styles.statLabelCompact]}>{stat.label}</Text>
+              <Text style={[styles.statDesc, isCompact && styles.statDescCompact]}>{stat.description}</Text>
             </View>
           ))}
         </View>
@@ -799,8 +808,6 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 40,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
@@ -811,15 +818,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 28,
-    gap: 18,
+    gap: 12,
   },
   levelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 16,
     paddingVertical: 6,
-    paddingHorizontal: 14,
-    marginRight: 12,
+    paddingHorizontal: 12,
+    flexShrink: 0,
     elevation: 2,
   },
   levelBadgeText: {
@@ -831,16 +838,19 @@ const styles = StyleSheet.create({
   userTextBlock: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
   },
   greeting: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 0,
+    flexShrink: 1,
   },
   username: {
     fontSize: 18,
     color: '#232323',
     fontWeight: 'bold',
+    flexShrink: 1,
   },
 
   statsRow: {
@@ -851,19 +861,29 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     gap: 8,
   },
+  statsRowCompact: {
+    gap: 6,
+  },
   statCard: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     backgroundColor: '#FFF',
     borderRadius: 16,
     borderTopWidth: 3,
     paddingVertical: 20,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
     shadowOpacity: 0.07,
     shadowRadius: 6,
     minHeight: 120,
+  },
+  statCardCompact: {
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    minHeight: 108,
   },
   statValue: {
     fontSize: 20,
@@ -872,12 +892,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
+  statValueCompact: {
+    fontSize: 16,
+  },
   statLabel: {
     fontSize: 11,
     color: '#666',
     textAlign: 'center',
     marginBottom: 6,
     fontWeight: '600',
+  },
+  statLabelCompact: {
+    fontSize: 10,
   },
   statDesc: {
     fontSize: 11,
@@ -886,6 +912,10 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     lineHeight: 14,
     fontWeight: '500',
+  },
+  statDescCompact: {
+    fontSize: 10,
+    lineHeight: 12,
   },
 
   categoryContext: {

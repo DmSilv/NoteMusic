@@ -16,8 +16,20 @@ interface Props {
   navigation: NavigationProp<any>;
 }
 
-const HERO_MODAL_GAP = 32;
 const WELCOME_ANDROID_NAV_BAR = '#FFFFFF';
+
+/** Espaçamentos proporcionais à altura da tela: mesma aparência em qualquer aparelho, sem depender de scroll. */
+function getHeroModalGap(height: number): number {
+  return Math.max(16, height * 0.035);
+}
+
+function getSecondSubtitleGap(height: number): number {
+  return Math.max(16, height * 0.035);
+}
+
+function getButtonRowSpacing(height: number): number {
+  return Math.max(16, height * 0.04);
+}
 
 export default function ShowAccountSelectionScreen({ navigation }: Props) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -73,12 +85,15 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
   const shouldDisplayImage = (height: number) => height > 720;
   const imageWidth = windowWidth * 1.1;
   const illustrationMaxHeight = windowHeight * 0.3;
+  const heroModalGap = getHeroModalGap(windowHeight);
+  const secondSubtitleGap = getSecondSubtitleGap(windowHeight);
+  const buttonRowSpacing = getButtonRowSpacing(windowHeight);
 
   return (
     <View style={styles.root}>
       <LevelTopBar />
       <View style={styles.body}>
-        <View style={[styles.heroSection, { paddingBottom: HERO_MODAL_GAP }]}>
+        <View style={[styles.heroSection, { paddingBottom: heroModalGap }]}>
           <Image source={LogoName} style={[logoNameImageStyles.image, { height: heightLogoImage }]} />
           {shouldDisplayImage(windowHeight) && (
             <Image
@@ -111,12 +126,12 @@ export default function ShowAccountSelectionScreen({ navigation }: Props) {
           <SubTitle
             subtitle="Escolha uma das opções abaixo para dar o primeiro passo na sua jornada."
             color="white"
-            marginTop={32}
+            marginTop={secondSubtitleGap}
             fontFamily="Roboto-Light"
             marginRight={0}
           />
 
-          <View style={styles.buttonContainer}>
+          <View style={[styles.buttonContainer, { marginTop: buttonRowSpacing, marginBottom: buttonRowSpacing }]}>
             <TertiaryButton title="Criar Conta" onPress={handlePressRegister} stylewidht={{ width: windowWidth * 0.4 }} />
             <SecondaryButton title="Já possui conta" onPress={handlePressLogin} styleWidth={{ width: windowWidth * 0.4 }} />
           </View>
@@ -164,8 +179,6 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 35,
-    marginBottom: 35,
     width: '100%',
   },
 });
