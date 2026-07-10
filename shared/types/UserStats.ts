@@ -79,7 +79,8 @@ export const VALIDATION_RULES = {
     PATTERN: /^[a-zA-ZÀ-ÿ\s]+$/
   },
   EMAIL: {
-    PATTERN: /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/
+    // Aceita qualquer TLD válido (ex.: .com, .com.br, .info, .app), não só 2-3 letras
+    PATTERN: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
   },
   PASSWORD: {
     MIN_LENGTH: 6,

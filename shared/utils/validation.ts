@@ -55,58 +55,19 @@ export const validateName = (name: string): { isValid: boolean; error?: string }
   return { isValid: true };
 };
 
-// ✅ Lista de domínios de email válidos (provedores confiáveis)
-const VALID_EMAIL_DOMAINS = [
-  // Gmail
-  'gmail.com', 'googlemail.com',
-  // Microsoft
-  'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
-  // Yahoo
-  'yahoo.com', 'yahoo.com.br', 'ymail.com',
-  // Apple
-  'icloud.com', 'me.com', 'mac.com',
-  // Outros provedores populares
-  'protonmail.com', 'proton.me',
-  'aol.com',
-  'zoho.com',
-  // Provedores brasileiros
-  'uol.com.br', 'bol.com.br', 'terra.com.br',
-  // Educacionais
-  'edu', 'edu.br', 'ac.uk', 'edu.au'
-];
-
-// Validação de email
+// Validação de email — valida apenas o formato (RFC-like), sem restringir a
+// uma lista fixa de provedores. Uma whitelist de domínios rejeitava e-mails
+// reais e válidos (ex.: nome@empresa.com.br, nome@vivo.com.br) só porque não
+// estavam na lista, o que não é um critério confiável de validade.
 export const validateEmail = (email: string): { isValid: boolean; error?: string } => {
   if (!email.trim()) {
     return { isValid: false, error: 'E-mail é obrigatório' };
   }
-  
-  // Validar formato básico
+
   if (!VALIDATION_RULES.EMAIL.PATTERN.test(email)) {
     return { isValid: false, error: 'E-mail inválido' };
   }
-  
-  // ✅ VALIDAR DOMÍNIO (apenas provedores válidos)
-  const emailLower = email.toLowerCase();
-  const domain = emailLower.split('@')[1];
-  
-  if (!domain) {
-    return { isValid: false, error: 'E-mail inválido' };
-  }
-  
-  // Verificar se o domínio está na lista de válidos ou termina com domínio educacional
-  const isValidDomain = VALID_EMAIL_DOMAINS.some(validDomain => {
-    // Permitir domínio exato ou subdomínio (ex: mail.uol.com.br)
-    return domain === validDomain || domain.endsWith('.' + validDomain);
-  });
-  
-  if (!isValidDomain) {
-    return { 
-      isValid: false, 
-      error: 'Use um e-mail de provedor válido (Gmail, Outlook, Yahoo, etc.)' 
-    };
-  }
-  
+
   return { isValid: true };
 };
 
