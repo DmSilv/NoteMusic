@@ -371,20 +371,22 @@ class ApiService {
   }
 
   async register(data: RegisterData): Promise<{ user: User; token: string }> {
-    console.log('🔍 ApiService: Iniciando registro...');
-    console.log('📤 ApiService: Dados recebidos:', data);
+    if (__DEV__) {
+      console.log('🔍 ApiService: Iniciando registro...');
+      console.log('📤 ApiService: Dados recebidos:', {
+        name: data.name,
+        email: data.email,
+        password: '[redacted]',
+      });
+    }
     
     try {
-      console.log('🌐 ApiService: Fazendo requisição para /auth/register...');
       const response = await this.request('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
       });
       
-      console.log('✅ ApiService: Resposta recebida:', response);
-      
       await this.saveToken(response.token);
-      console.log('✅ ApiService: Token salvo com sucesso');
       
       const user = normalizeUser(response.user);
       if (!user?.id) {
@@ -392,7 +394,9 @@ class ApiService {
       }
       return { ...response, user };
     } catch (error) {
-      console.error('❌ ApiService: Erro na requisição:', error);
+      if (__DEV__) {
+        console.error('❌ ApiService: Erro na requisição de registro:', error);
+      }
       throw error;
     }
   }

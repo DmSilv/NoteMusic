@@ -124,8 +124,8 @@ export default function RegisterUser({ navigation }) {
     
     try {
       console.log('🌐 Chamando função register do AuthContext...');
-      const registerData = { name, email, password };
-      console.log('📤 Dados enviados:', registerData);
+      // Nunca logar senha
+      console.log('📤 Dados enviados:', { name, email, password: '[redacted]' });
       
       console.log('⏳ Aguardando resposta da função register...');
       
@@ -141,42 +141,43 @@ export default function RegisterUser({ navigation }) {
         setTimeout(() => reject(new Error('Timeout: Função register demorou mais de 10 segundos')), 10000);
       });
       
-      const registerPromise = register(registerData);
+      const registerPromise = register({ name, email, password });
       
       await Promise.race([registerPromise, timeoutPromise]);
       
       console.log('✅ Registro realizado com sucesso!');
       
-      // Perguntar se quer salvar as credenciais
+      // Perguntar se quer lembrar apenas o e-mail (senha NUNCA é salva no dispositivo)
       Alert.alert(
         'Conta Criada com Sucesso! 🎉',
-        'Deseja salvar suas credenciais para facilitar o login futuro?',
+        'Deseja lembrar seu e-mail para facilitar o próximo login?\n\nPor segurança, a senha não será salva no aparelho.',
         [
           {
             text: 'Não',
             style: 'cancel',
             onPress: () => {
-              console.log('👤 Usuário escolheu não salvar credenciais');
+              console.log('👤 Usuário escolheu não lembrar e-mail');
               navigation.navigate('AppIntroScreen');
             }
           },
           {
             text: 'Sim',
             onPress: async () => {
-              console.log('💾 Usuário escolheu salvar credenciais');
+              console.log('💾 Usuário escolheu lembrar e-mail');
               try {
                 await AsyncStorage.setItem('@NoteMusic:savedEmail', email);
-                await AsyncStorage.setItem('@NoteMusic:savedPassword', password);
-                await AsyncStorage.setItem('@NoteMusic:autoLogin', 'true');
-                console.log('✅ Credenciais salvas com sucesso');
+                await AsyncStorage.setItem('@NoteMusic:rememberEmail', 'true');
+                await AsyncStorage.removeItem('@NoteMusic:savedPassword');
+                await AsyncStorage.removeItem('@NoteMusic:autoLogin');
+                console.log('✅ E-mail lembrado com sucesso');
                 Alert.alert(
-                  'Perfeito! 🎉', 
-                  'Suas credenciais foram salvas com segurança!\n\nNa próxima vez que abrir o app, seus dados já estarão preenchidos automaticamente.',
+                  'Perfeito! 🎉',
+                  'Seu e-mail foi lembrado neste aparelho.\n\nPor segurança, a senha nunca é armazenada localmente.',
                   [{ text: 'Entendi!', style: 'default' }]
                 );
               } catch (error) {
-                console.error('❌ Erro ao salvar credenciais:', error);
-                Alert.alert('Aviso', 'Não foi possível salvar suas credenciais, mas sua conta foi criada com sucesso!');
+                console.error('❌ Erro ao lembrar e-mail:', error);
+                Alert.alert('Aviso', 'Não foi possível lembrar o e-mail, mas sua conta foi criada com sucesso!');
               }
               navigation.navigate('AppIntroScreen');
             }
