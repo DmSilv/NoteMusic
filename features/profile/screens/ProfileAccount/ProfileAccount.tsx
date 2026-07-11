@@ -1,4 +1,5 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, Image, ScrollView, Alert, Switch } from 'react-native';
+﻿import { StyleSheet, View, Text, TextInput, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, Image, ScrollView, Switch } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import React, { useState, useEffect, useRef } from 'react';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import useLevelTheme from '@/shared/hooks/useLevelTheme';
@@ -17,6 +18,7 @@ import EditAccount from '@/assets/images/Edit-Account.png';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '@/contexts/AuthContext';
 import { validateEmail, validateName } from '@/shared/utils/validation';
+import { confirmExitApp } from '@/shared/utils/exitApp';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 interface ModuleCategoryProps {
     navigation: NativeStackNavigationProp<any>;
@@ -38,7 +40,7 @@ interface ModuleCategoryProps {
         disableBiometricLogin,
     } = useAuth();
     const [isTogglingBiometric, setIsTogglingBiometric] = useState(false);
-    const { level: themeLevel } = useLevelTheme();
+    const { level: themeLevel, colors: levelColors } = useLevelTheme();
     const insets = useSafeAreaInsets();
     
     // Estados do formulário
@@ -150,13 +152,13 @@ interface ModuleCategoryProps {
 
     const handleUpdateAccount = async () => {
         if (!validateForm()) {
-            Alert.alert('Erro de Validação', 'Por favor, corrija os erros nos campos.');
+            appAlert('Erro de Validação', 'Por favor, corrija os erros nos campos.');
             return;
         }
 
         // Verificar se há mudanças
         if (!hasChanges()) {
-            Alert.alert('Aviso', 'Nenhuma alteração foi feita nos campos.');
+            appAlert('Aviso', 'Nenhuma alteração foi feita nos campos.');
             return;
         }
 
@@ -182,7 +184,7 @@ interface ModuleCategoryProps {
             // Chamar função de atualização do contexto
             await updateUser(updateData);
             
-            Alert.alert('Sucesso', 'Conta atualizada com sucesso!');
+            appAlert('Sucesso', 'Conta atualizada com sucesso!');
             
             // Limpar campos de senha
             setFormData(prev => ({
@@ -193,7 +195,7 @@ interface ModuleCategoryProps {
             
         } catch (error: any) {
             console.error('Erro ao atualizar conta:', error);
-            Alert.alert('Erro', error.message || 'Não foi possível atualizar a conta. Tente novamente.');
+            appAlert('Erro', error.message || 'Não foi possível atualizar a conta. Tente novamente.');
         } finally {
             setIsLoading(false);
         }
@@ -206,19 +208,19 @@ interface ModuleCategoryProps {
         try {
             if (value) {
                 await enableBiometricLogin();
-                Alert.alert('Ativado!', `Agora você pode entrar usando ${biometricTypeLabel}.`);
+                appAlert('Ativado!', `Agora você pode entrar usando ${biometricTypeLabel}.`);
             } else {
                 await disableBiometricLogin();
             }
         } catch (error: any) {
-            Alert.alert('Ops!', error.message || 'Não foi possível atualizar a configuração de biometria.');
+            appAlert('Ops!', error.message || 'Não foi possível atualizar a configuração de biometria.');
         } finally {
             setIsTogglingBiometric(false);
         }
     };
 
     const handleLogout = () => {
-        Alert.alert(
+        appAlert(
             'Sair da conta',
             'Tem certeza que deseja sair da sua conta?',
             [
@@ -239,6 +241,10 @@ interface ModuleCategoryProps {
                 },
             ]
         );
+    };
+
+    const handleCloseApp = () => {
+        confirmExitApp();
     };
 
     // ✅ Removido - usando validateEmail do utils/validation.ts (já importado)
@@ -430,7 +436,7 @@ interface ModuleCategoryProps {
                         <TouchableOpacity 
                             style={styles.actionButton}
                             onPress={() => {
-                                Alert.alert(
+                                appAlert(
                                     'Excluir Conta',
                                     'Tem certeza que deseja excluir sua conta? Esta ação é irreversível.',
                                     [
@@ -449,6 +455,33 @@ interface ModuleCategoryProps {
                             <Text style={styles.actionDeleteText}>Excluir minha conta</Text>
                             <MaterialCommunityIcons name="chevron-right" size={22} color="#DC3545" />
                         </TouchableOpacity>
+
+                        {/* Opção discreta e centralizada: fecha o app sem deslogar */}
+                        <View style={styles.closeAppSection}>
+                            <View style={styles.closeAppDivider} />
+                            <Text style={styles.closeAppHint}>
+                                Sempre que quiser, sua música te espera aqui.
+                            </Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.closeAppButton,
+                                    { borderColor: `${levelColors.primary}33` },
+                                ]}
+                                onPress={handleCloseApp}
+                                activeOpacity={0.75}
+                                accessibilityRole="button"
+                                accessibilityLabel="Fechar aplicativo"
+                            >
+                                <MaterialCommunityIcons
+                                    name="music-note-off-outline"
+                                    size={18}
+                                    color={levelColors.primary}
+                                />
+                                <Text style={[styles.closeAppButtonText, { color: levelColors.primary }]}>
+                                    Fechar aplicativo
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </ScrollView>
@@ -552,6 +585,43 @@ const styles = StyleSheet.create({
         color: '#DC3545',
         fontWeight: '500',
         marginLeft: 12,
+    },
+    closeAppSection: {
+        marginTop: 8,
+        alignItems: 'center',
+        paddingHorizontal: 8,
+    },
+    closeAppDivider: {
+        width: 48,
+        height: 2,
+        borderRadius: 1,
+        backgroundColor: '#E8E8E8',
+        marginBottom: 16,
+    },
+    closeAppHint: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#8A8A8A',
+        fontFamily: 'Roboto-Light',
+        textAlign: 'center',
+        marginBottom: 12,
+        paddingHorizontal: 12,
+    },
+    closeAppButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 20,
+        borderWidth: 1,
+        backgroundColor: '#FAFAFA',
+    },
+    closeAppButtonText: {
+        fontSize: 13,
+        fontFamily: 'Roboto-Medium',
+        letterSpacing: 0.2,
     },
 });
 

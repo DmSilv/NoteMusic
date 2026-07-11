@@ -1,4 +1,4 @@
-import {
+﻿import {
   StyleSheet,
   View,
   Keyboard,
@@ -7,8 +7,8 @@ import {
   ScrollView,
   useWindowDimensions,
   Image,
-  Alert,
 } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import React, { useState, useEffect, useRef } from 'react';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import garota_sentada from '@/assets/images/autenticacao.png';
@@ -53,7 +53,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
       // Único botão, propositalmente: o objetivo é levar o usuário direto para
       // digitar o código recebido, não dar a opção de "escapar" de volta pro
       // login (o que não fazia sentido nesse ponto do fluxo de recuperação).
-      Alert.alert(
+      appAlert(
         'Verifique seu e-mail',
         response.message ||
           'Se este e-mail estiver cadastrado, enviaremos instruções para redefinir sua senha.',
@@ -68,7 +68,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
       );
     } catch (error: any) {
       const processed = processError(error);
-      Alert.alert(processed.title, processed.message);
+      appAlert(processed.title, processed.message);
     } finally {
       setIsLoading(false);
     }

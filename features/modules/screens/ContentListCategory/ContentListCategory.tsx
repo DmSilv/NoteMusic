@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, Alert, LayoutAnimation, UIManager, Platform, ScrollView } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, LayoutAnimation, UIManager, Platform, ScrollView } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -263,7 +264,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             const isCompleted = completionStatus.get(moduleId) || false;
             
             if (isCompleted) {
-                Alert.alert(
+                appAlert(
                     'Quiz Concluído',
                     'Este quiz já foi completado com sucesso! Você pode revisar o conteúdo ou explorar outros módulos.',
                     [{ text: 'OK', style: 'default' }]
@@ -290,7 +291,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             const remoteBlocks = remoteStatus && remoteStatus.canAttempt === false;
             if (remoteBlocks || !currentStatus.canAttempt || cooldownInfo.isOnCooldown) {
                 if (currentStatus.reason === 'completed') {
-                    Alert.alert(
+                    appAlert(
                         'Quiz Concluído',
                         'Este quiz já foi concluído com sucesso! Você pode revisar o conteúdo ou explorar outros módulos.',
                         [{ text: 'OK', style: 'default' }]
@@ -307,21 +308,21 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                         timeStr = `${m}:${s.toString().padStart(2, '0')}`;
                     }
                     
-                    Alert.alert(
+                    appAlert(
                         'Quiz Bloqueado',
                         `Este quiz está bloqueado por ${timeStr} minutos.\n\nVocê esgotou suas tentativas. Aproveite para estudar e tente novamente em breve!`,
                         [{ text: 'OK', style: 'default' }]
                     );
                     return;
                 } else if (currentStatus.reason === 'max_attempts_reached' || remoteStatus?.reason === 'max_attempts_reached') {
-                    Alert.alert(
+                    appAlert(
                         'Tentativas Esgotadas',
                         'Você esgotou suas tentativas para este quiz. O quiz ficará bloqueado por 30 minutos.\n\nAproveite para estudar e tente novamente em breve!',
                         [{ text: 'OK', style: 'default' }]
                     );
                     return;
                 } else {
-                    Alert.alert(
+                    appAlert(
                         'Quiz Indisponível',
                         remoteStatus?.message || 'Este quiz não está disponível no momento. Tente novamente mais tarde.',
                         [{ text: 'OK', style: 'default' }]
@@ -341,7 +342,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             });
             
         } catch (error) {
-            Alert.alert(
+            appAlert(
                 'Erro de Verificação',
                 'Não foi possível verificar o status do quiz. Tente novamente mais tarde.',
                 [{ text: 'OK', style: 'default' }]

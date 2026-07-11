@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🚫 Tela de Conta Desativada - Design Padrão NoteMusic
  * Exibe informações sobre conta desativada seguindo o design system
  */
@@ -10,9 +10,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator
 } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,7 +35,7 @@ export default function DeactivatedAccountScreen({
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCancelDeletion = async () => {
-    Alert.alert(
+    appAlert(
       'Cancelar Exclusão',
       'Tem certeza que deseja cancelar a exclusão da sua conta? Ela será reativada imediatamente.',
       [
@@ -46,7 +46,7 @@ export default function DeactivatedAccountScreen({
             setIsLoading(true);
             try {
               await apiService.cancelAccountDeletion();
-              Alert.alert(
+              appAlert(
                 'Sucesso!',
                 'Sua conta foi reativada com sucesso! Você pode fazer login novamente.',
                 [
@@ -58,7 +58,7 @@ export default function DeactivatedAccountScreen({
               );
             } catch (error: any) {
               console.error('Erro ao cancelar exclusão:', error);
-              Alert.alert('Erro', error.message || 'Falha ao cancelar exclusão da conta.');
+              appAlert('Erro', error.message || 'Falha ao cancelar exclusão da conta.');
             } finally {
               setIsLoading(false);
             }
@@ -187,7 +187,7 @@ export default function DeactivatedAccountScreen({
           <TouchableOpacity
             style={[styles.button, styles.helpButton]}
             onPress={() => {
-              Alert.alert(
+              appAlert(
                 'Suporte',
                 'Para mais informações sobre exclusão de conta, entre em contato com nosso suporte através do email: suporte.notemusic@gmail.com',
                 [{ text: 'OK' }]

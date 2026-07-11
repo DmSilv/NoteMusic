@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, ActivityIndicator, Animated, LayoutAnimation, Platform, UIManager, BackHandler } from 'react-native';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView, ActivityIndicator, Animated, LayoutAnimation, Platform, UIManager, BackHandler } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -68,6 +69,25 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
     const moduleId = route.params?.moduleId;
     const isRetry = route.params?.isRetry || false;
     const passedAttemptStatus = route.params?.attemptStatus;
+    const isDailyChallenge =
+        route.params?.isDailyChallenge === true ||
+        moduleId === 'daily' ||
+        moduleId === 'daily-challenge' ||
+        moduleId === 'daily-challenge-mock';
+
+    const leaveQuizAfterLosingAttempt = async () => {
+        try {
+            if (isDailyChallenge) {
+                route.params?.onComplete?.();
+            } else if (moduleId && moduleId !== 'daily-challenge-mock') {
+                await quizAttemptService.registerQuizAttempt(moduleId, moduleId, false);
+            }
+        } catch (error) {
+            console.error('Erro ao registrar tentativa perdida:', error);
+        } finally {
+            navigation.navigate('ProfileHome');
+        }
+    };
     
     // ✅ REFERÊNCIA para garantir acesso ao estado mais recente
     const stateRef = useRef<QuizState>({
@@ -202,28 +222,21 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             const isQuizLoaded = !state.isLoading && state.quiz;
             
             if (isQuizLoaded) {
-                Alert.alert(
-                    '⚠️ Sair do Quiz?',
-                    'Ao sair, você perderá uma tentativa. Deseja continuar?',
+                appAlert(
+                    isDailyChallenge ? 'Sair do desafio?' : 'Sair do Quiz?',
+                    isDailyChallenge
+                        ? 'Você tem só 1 tentativa por dia. Se sair agora, a chance de hoje será usada. Novo desafio à meia-noite.'
+                        : 'Ao sair, você perderá uma tentativa. Deseja continuar?',
                     [
                         {
                             text: 'Continuar',
                             style: 'cancel'
                         },
                         {
-                            text: 'Sair e Perder Tentativa',
+                            text: isDailyChallenge ? 'Sair e usar a chance' : 'Sair e Perder Tentativa',
                             style: 'destructive',
-                            onPress: async () => {
-                                try {
-                                    // Registrar tentativa perdida
-                                    if (moduleId && moduleId !== 'daily-challenge-mock') {
-                                        await quizAttemptService.registerQuizAttempt(moduleId, moduleId, false);
-                                    }
-                                    navigation.goBack();
-                                } catch (error) {
-                                    console.error('Erro ao registrar tentativa perdida:', error);
-                                    navigation.goBack();
-                                }
+                            onPress: () => {
+                                leaveQuizAfterLosingAttempt();
                             }
                         }
                     ]
@@ -235,7 +248,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         });
 
         return () => backHandler.remove();
-    }, [state.isLoading, state.quiz, navigation, moduleId]);
+    }, [state.isLoading, state.quiz, navigation, moduleId, isDailyChallenge]);
 
     // ✅ VALIDAÇÃO DE SEGURANÇA: Garantir que o índice está dentro dos limites
     useEffect(() => {
@@ -312,7 +325,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 if (newRetryCount <= 1) {
                     // ✅ Primeira tentativa - permitir tentar novamente
                     setTimeout(() => {
-                        Alert.alert(
+                        appAlert(
                             'Erro ao Carregar Quiz',
                             'Não foi possível carregar o quiz. Verifique sua conexão e tente novamente.',
                             [
@@ -324,7 +337,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 } else {
                     // ✅ Sem mais tentativas - apenas voltar
                     setTimeout(() => {
-                        Alert.alert(
+                        appAlert(
                             'Erro ao Carregar Quiz',
                             'Não foi possível carregar o quiz após várias tentativas. Verifique sua conexão e tente novamente mais tarde.',
                             [
@@ -348,23 +361,34 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         (async () => {
             if (!moduleId || moduleId === 'default') {
                 setTimeout(() => {
-                    Alert.alert('Erro', 'ID do módulo inválido. Volte e tente novamente.');
+                    appAlert('Erro', 'ID do módulo inválido. Volte e tente novamente.');
                     navigation.goBack();
                 }, 0);
+                return;
+            }
+
+            // Desafio diário: não usa cooldown de módulo (1x/dia é controlado no lobby)
+            if (isDailyChallenge) {
+                try {
+                    await quizAttemptService.resetQuizAttempts('daily-challenge', 'daily-challenge');
+                    await quizAttemptService.resetQuizAttempts('daily', 'daily');
+                    await quizAttemptService.resetQuizAttempts('daily-challenge-mock', 'daily-challenge-mock');
+                } catch {}
+                loadQuiz();
                 return;
             }
 
             // Guard imediato via params
             if (passedAttemptStatus) {
                 if (passedAttemptStatus.reason === 'completed') {
-                    Alert.alert('Quiz Concluído', 'Este quiz já foi completado com sucesso!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+                    appAlert('Quiz Concluído', 'Este quiz já foi completado com sucesso!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
                     return;
                 }
                 if (passedAttemptStatus.attempts?.cooldownUntil) {
                     const cooldownEnd = new Date(passedAttemptStatus.attempts.cooldownUntil);
                     if (Date.now() < cooldownEnd.getTime()) {
                         const minutes = Math.ceil((cooldownEnd.getTime() - Date.now()) / 60000);
-                        Alert.alert('⏰ Quiz em Cooldown', `Aguarde ${minutes} minuto(s) para tentar novamente.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+                        appAlert('⏰ Quiz em Cooldown', `Aguarde ${minutes} minuto(s) para tentar novamente.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
                         return;
                     }
                 }
@@ -375,19 +399,19 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                 const cooldownInfo = await quizAttemptService.getCooldownInfo(moduleId, moduleId);
                 if (cooldownInfo.isOnCooldown) {
                     const timeStr = `${cooldownInfo.timeRemaining.minutes}:${cooldownInfo.timeRemaining.seconds.toString().padStart(2, '0')}`;
-                    Alert.alert('⏰ Quiz em Cooldown', `Este quiz está bloqueado por ${timeStr} minutos.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+                    appAlert('⏰ Quiz em Cooldown', `Este quiz está bloqueado por ${timeStr} minutos.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
                     return;
                 }
             } catch {}
 
             // ✅ VERIFICAR TENTATIVAS NO BACKEND se for retry
-            if (isRetry && moduleId !== 'daily-challenge' && moduleId !== 'daily-challenge-mock') {
+            if (isRetry) {
                 checkBackendAttempts();
             } else {
                 loadQuiz();
             }
         })();
-    }, [loadQuiz, isRetry, moduleId, passedAttemptStatus, navigation]);
+    }, [loadQuiz, isRetry, moduleId, passedAttemptStatus, navigation, isDailyChallenge]);
 
     // ✅ FUNÇÃO PARA VERIFICAR TENTATIVAS NO BACKEND (COOLDOWN ESPECÍFICO POR QUIZ)
     const checkBackendAttempts = async () => {
@@ -404,7 +428,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     const cooldownInfo = await quizAttemptService.getCooldownInfo(moduleId, moduleId);
                     const timeStr = `${cooldownInfo.timeRemaining.minutes}:${cooldownInfo.timeRemaining.seconds.toString().padStart(2, '0')}`;
                     
-                    Alert.alert(
+                    appAlert(
                         '⏰ Quiz em Cooldown',
                         `Este quiz está bloqueado temporariamente.\n\nTempo restante: ${timeStr}\n\n💡 Outros quizzes não são afetados!`,
                         [{ text: 'Voltar', onPress: () => navigation.goBack() }]
@@ -426,7 +450,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
                     // ✅ COOLDOWN ATIVO APENAS PARA ESTE QUIZ - Mostrar timer e bloquear
                     const timeRemaining = Math.ceil((cooldownEnd.getTime() - now.getTime()) / (1000 * 60));
                     
-                    Alert.alert(
+                    appAlert(
                         '⏰ Quiz em Cooldown',
                         `Este quiz específico está em suspensão temporária.\n\nAguarde ${timeRemaining} minutos antes de tentar novamente.\n\n💡 Outros quizzes não são afetados!`,
                         [
@@ -451,7 +475,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             console.error('❌ Erro ao verificar tentativas:', error);
             
             // Mostrar alerta com informação mais detalhada
-            Alert.alert(
+            appAlert(
                 'Erro ao verificar quiz',
                 'Não foi possível verificar se você pode iniciar este quiz. Vamos tentar carregá-lo mesmo assim.',
                 [
@@ -515,7 +539,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
             const maxIndex = (state.quiz?.questions.length || 0) - 1;
             if (state.currentQuestionIndex < 0 || state.currentQuestionIndex > maxIndex) {
                 console.error(`❌ Índice de questão inválido: ${state.currentQuestionIndex} (max: ${maxIndex})`);
-                Alert.alert(
+                appAlert(
                     'Erro',
                     `Erro ao validar questão. Por favor, recarregue o quiz.`,
                     [{ text: 'OK' }]
@@ -807,26 +831,18 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => {
         const isQuizLoaded = !state.isLoading && state.quiz;
         
         if (isQuizLoaded) {
-            // Quiz carregado: mostrar alerta de saída
-            Alert.alert(
-                '⚠️ Sair do Quiz?',
-                'Ao sair, você perderá uma tentativa. Deseja continuar?',
+            appAlert(
+                isDailyChallenge ? 'Sair do desafio?' : 'Sair do Quiz?',
+                isDailyChallenge
+                    ? 'Você tem só 1 tentativa por dia. Se sair agora, a chance de hoje será usada. Novo desafio à meia-noite.'
+                    : 'Ao sair, você perderá uma tentativa. Deseja continuar?',
                 [
                     { text: 'Continuar', style: 'cancel' },
                     { 
-                        text: 'Sair e Perder Tentativa',
+                        text: isDailyChallenge ? 'Sair e usar a chance' : 'Sair e Perder Tentativa',
                         style: 'destructive',
-                        onPress: async () => {
-                            try {
-                                // Registrar tentativa perdida
-                                if (moduleId && moduleId !== 'daily-challenge-mock') {
-                                    await quizAttemptService.registerQuizAttempt(moduleId, moduleId, false);
-                                }
-                                navigation.goBack();
-                            } catch (error) {
-                                console.error('Erro ao registrar tentativa perdida:', error);
-                                navigation.goBack();
-                            }
+                        onPress: () => {
+                            leaveQuizAfterLosingAttempt();
                         }
                     }
                 ]

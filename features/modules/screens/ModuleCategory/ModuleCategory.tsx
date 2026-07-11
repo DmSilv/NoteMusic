@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import { useFocusEffect } from '@react-navigation/native';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
@@ -366,13 +367,13 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
             
             // ✅ Tratar erro 429 especificamente
             if (error?.response?.status === 429 || error?.status === 429) {
-                Alert.alert(
+                appAlert(
                     'Muitas Requisições',
                     'Você fez muitas requisições. Aguarde alguns segundos e tente novamente.',
                     [{ text: 'OK', style: 'default' }]
                 );
             } else {
-                Alert.alert(
+                appAlert(
                     'Erro na Validação',
                     'Não foi possível validar o status dos quizzes. Tente novamente.',
                     [{ text: 'OK', style: 'default' }]
@@ -399,7 +400,7 @@ const ModuleCategory: React.FC<ModuleCategoryProps> = ({ navigation }) => {
         ).length || 0;
         const progress = moduleCount > 0 ? Math.round((completedCount / moduleCount) * 100) : 0;
         
-        Alert.alert(
+        appAlert(
             category.name,
             `📚 Módulos: ${moduleCount}\n✅ Concluídos: ${completedCount}\n📊 Progresso: ${progress}%\n\n${category.modules?.[0]?.description || 'Categoria de estudos musicais.'}`,
             [{ text: 'OK' }]

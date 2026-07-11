@@ -1,4 +1,4 @@
-import {
+﻿import {
   StyleSheet,
   View,
   Text,
@@ -9,8 +9,8 @@ import {
   ScrollView,
   useWindowDimensions,
   Image,
-  Alert,
 } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import React, { useState, useEffect, useRef } from 'react';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import garota_sentada from '@/assets/images/autenticacao.png';
@@ -103,14 +103,14 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
         });
       });
 
-      Alert.alert(
+      appAlert(
         'Senha redefinida',
         'Sua senha foi alterada com sucesso. Faça login com a nova senha.',
         [{ text: 'Ir para login', onPress: () => navigation.navigate('LoginScreen') }]
       );
     } catch (error: any) {
       const processed = processError(error);
-      Alert.alert(processed.title, processed.message);
+      appAlert(processed.title, processed.message);
     }
   };
 
@@ -123,14 +123,14 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
     const emailValidation = validateEmail(email);
     if (!emailValidation.isValid) {
       validateField('email');
-      Alert.alert('E-mail inválido', 'Confirme o e-mail acima antes de reenviar o código.');
+      appAlert('E-mail inválido', 'Confirme o e-mail acima antes de reenviar o código.');
       return;
     }
 
     setIsResending(true);
     try {
       const response = await apiService.forgotPassword(email);
-      Alert.alert(
+      appAlert(
         'Código reenviado',
         response.message ||
           'Se este e-mail estiver cadastrado, enviaremos um novo código para redefinir sua senha.'
@@ -138,7 +138,7 @@ export default function ResetPasswordScreen({ navigation, route }: ResetPassword
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (error: any) {
       const processed = processError(error);
-      Alert.alert(processed.title, processed.message);
+      appAlert(processed.title, processed.message);
     } finally {
       setIsResending(false);
     }

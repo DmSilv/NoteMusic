@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,6 +12,7 @@ import {
   useWindowDimensions,
   Image
 } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiService } from '@/services/api';
@@ -55,12 +55,12 @@ export default function AccountDeletionScreen() {
 
   const handleRequestDeletion = async () => {
     if (!user) {
-      Alert.alert('Erro', 'Usuário não encontrado.');
+      appAlert('Erro', 'Usuário não encontrado.');
       return;
     }
 
     if (!password || confirmation !== 'EXCLUIR CONTA') {
-      Alert.alert('Erro', 'Para confirmar a exclusão, digite exatamente "EXCLUIR CONTA" no campo de confirmação.');
+      appAlert('Erro', 'Para confirmar a exclusão, digite exatamente "EXCLUIR CONTA" no campo de confirmação.');
       return;
     }
 
@@ -68,7 +68,7 @@ export default function AccountDeletionScreen() {
     try {
       await apiService.requestAccountDeletion({ password, confirmation, reason });
       
-      Alert.alert('Sucesso', 'Sua conta foi marcada para exclusão e será permanentemente removida em 7 dias.', [
+      appAlert('Sucesso', 'Sua conta foi marcada para exclusão e será permanentemente removida em 7 dias.', [
         {
           text: 'OK',
           onPress: async () => {
@@ -87,7 +87,7 @@ export default function AccountDeletionScreen() {
       console.error('Erro ao solicitar exclusão:', error);
       
       // Tratamento de erro simples
-      Alert.alert('Erro', 'Não foi possível processar a solicitação. Tente novamente.');
+      appAlert('Erro', 'Não foi possível processar a solicitação. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +96,7 @@ export default function AccountDeletionScreen() {
   const handleCancelDeletion = async () => {
     if (!user) return;
     
-    Alert.alert(
+    appAlert(
       'Cancelar Exclusão',
       'Tem certeza que deseja cancelar a solicitação de exclusão da sua conta?',
       [
@@ -107,11 +107,11 @@ export default function AccountDeletionScreen() {
             setIsLoading(true);
             try {
               await apiService.cancelAccountDeletion();
-              Alert.alert('Sucesso', 'Sua solicitação de exclusão foi cancelada e sua conta foi reativada.');
+              appAlert('Sucesso', 'Sua solicitação de exclusão foi cancelada e sua conta foi reativada.');
               loadDeletionStatus();
             } catch (error: any) {
               console.error('Erro ao cancelar exclusão:', error);
-              Alert.alert('Erro', 'Não foi possível cancelar a solicitação. Tente novamente.');
+              appAlert('Erro', 'Não foi possível cancelar a solicitação. Tente novamente.');
             } finally {
               setIsLoading(false);
             }

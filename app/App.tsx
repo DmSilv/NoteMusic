@@ -4,6 +4,7 @@ import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/shared/components/notification/NotificationProvider';
+import { DialogProvider } from '@/shared/components/ui/DialogProvider';
 import AppSplashScreen from '@/shared/components/splash/AppSplashScreen';
 import RootNavigator from './navigation/RootNavigator';
 
@@ -61,7 +62,9 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <NotificationProvider>
-          <RootNavigator />
+          <DialogProvider>
+            <RootNavigator />
+          </DialogProvider>
         </NotificationProvider>
       </AuthProvider>
     </SafeAreaProvider>

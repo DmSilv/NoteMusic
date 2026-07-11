@@ -1,4 +1,5 @@
-import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView, Alert } from 'react-native';
+﻿import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions, Image, ScrollView } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -148,7 +149,7 @@ export default function RegisterUser({ navigation }) {
       console.log('✅ Registro realizado com sucesso!');
       
       // Perguntar se quer lembrar apenas o e-mail (senha NUNCA é salva no dispositivo)
-      Alert.alert(
+      appAlert(
         'Conta Criada com Sucesso! 🎉',
         'Deseja lembrar seu e-mail para facilitar o próximo login?\n\nPor segurança, a senha não será salva no aparelho.',
         [
@@ -170,14 +171,14 @@ export default function RegisterUser({ navigation }) {
                 await AsyncStorage.removeItem('@NoteMusic:savedPassword');
                 await AsyncStorage.removeItem('@NoteMusic:autoLogin');
                 console.log('✅ E-mail lembrado com sucesso');
-                Alert.alert(
+                appAlert(
                   'Perfeito! 🎉',
                   'Seu e-mail foi lembrado neste aparelho.\n\nPor segurança, a senha nunca é armazenada localmente.',
                   [{ text: 'Entendi!', style: 'default' }]
                 );
               } catch (error) {
                 console.error('❌ Erro ao lembrar e-mail:', error);
-                Alert.alert('Aviso', 'Não foi possível lembrar o e-mail, mas sua conta foi criada com sucesso!');
+                appAlert('Aviso', 'Não foi possível lembrar o e-mail, mas sua conta foi criada com sucesso!');
               }
               navigation.navigate('AppIntroScreen');
             }
@@ -193,7 +194,7 @@ export default function RegisterUser({ navigation }) {
       
       // Tratamento de erro mais detalhado
       const errorMessage = error?.message || 'Erro desconhecido';
-      Alert.alert('Erro no Cadastro', `Não foi possível criar a conta: ${errorMessage}`);
+      appAlert('Erro no Cadastro', `Não foi possível criar a conta: ${errorMessage}`);
     } finally {
       console.log('🏁 Finalizando processo de registro...');
       setIsLoading(false);

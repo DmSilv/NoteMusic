@@ -1,4 +1,5 @@
-import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image, Alert } from 'react-native';
+﻿import { StyleSheet, View, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, Image } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import React, { useState, useEffect, useRef } from 'react';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import garota_sentada from '@/assets/images/autenticacao.png';
@@ -63,7 +64,7 @@ export default function ChangePasswordScreen({ navigation, route }: ChangePasswo
         return await changeTempPassword(formState.currentPassword.value, formState.newPassword.value);
       });
       
-      Alert.alert(
+      appAlert(
         'Senha Alterada com Sucesso! ✅',
         'Sua nova senha foi definida com segurança. Agora você pode acessar todas as funcionalidades do app.',
         [
@@ -76,7 +77,7 @@ export default function ChangePasswordScreen({ navigation, route }: ChangePasswo
       );
     } catch (error) {
       console.error('Erro ao alterar senha:', error);
-      Alert.alert(
+      appAlert(
         'Erro',
         error.message || 'Erro ao alterar senha. Verifique se a senha atual está correta.'
       );

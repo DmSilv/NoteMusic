@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, BackHandler, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, BackHandler } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import MenuBottom, { getMenuBottomHeight } from '@/shared/components/layout/MenuBottom';
@@ -13,6 +13,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats } from '@/shared/types/UserStats';
 import { getLevelColors } from '@/shared/constants/theme';
 import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
+import { confirmExitApp } from '@/shared/utils/exitApp';
+import quizService from '@/services/quizService';
+import {
+  DAILY_CHALLENGE_COPY,
+  DAILY_CHALLENGE_DEFAULTS,
+  formatDailyChallengeCountdown,
+} from '@/shared/constants/dailyChallenge';
 
 // ✅ INTERFACE PARA CONTROLE DE DESAFIO DIÁRIO
 interface DailyChallengeStatus {
@@ -21,6 +28,11 @@ interface DailyChallengeStatus {
   nextAvailableAt: string | null;
   canPlay: boolean;
   timeRemaining: string;
+}
+
+interface DailyChallengeMeta {
+  questions: number;
+  timeMinutes: number;
 }
 
 
@@ -155,6 +167,10 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     canPlay: true,
     timeRemaining: ''
   });
+  const [dailyChallengeMeta, setDailyChallengeMeta] = useState<DailyChallengeMeta>({
+    questions: DAILY_CHALLENGE_DEFAULTS.questions,
+    timeMinutes: DAILY_CHALLENGE_DEFAULTS.timeMinutes,
+  });
   
   // Animação sutil para o badge de nível
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -202,6 +218,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
     loadUserData();
     loadDailyChallengeStatus();
+    loadDailyChallengeMeta();
   }, [user?.id]);
 
   // ✅ Estado para rastrear se a tela está focada
@@ -265,23 +282,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       }
       
       // ✅ Só pergunta se quer sair quando está na Home focada e não há mais para onde voltar
-      Alert.alert(
-        'Sair do NoteMusic?',
-        'Deseja realmente sair do aplicativo?',
-        [
-          {
-            text: 'Cancelar',
-            style: 'cancel',
-            onPress: () => null
-          },
-          {
-            text: 'Sair',
-            style: 'destructive',
-            onPress: () => BackHandler.exitApp()
-          }
-        ],
-        { cancelable: true }
-      );
+      confirmExitApp();
       return true; // Previne comportamento padrão (sair imediatamente)
     });
 
@@ -303,6 +304,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       console.log('🔄 [ProfileHome] Foco — recarregando progresso', forceRefresh ? '(forçado)' : '');
       loadUserData(forceRefresh);
       loadDailyChallengeStatus();
+      loadDailyChallengeMeta();
 
       if (forceRefresh) {
         navigation.setParams({ forceRefresh: undefined });
@@ -310,25 +312,50 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     }, [user?.id, navigation])
   );
 
-  // ✅ TIMER AUTOMÁTICO: Verificar a cada minuto se é um novo dia (meia-noite passou)
+  // ✅ TIMER: atualizar countdown até meia-noite e liberar no novo dia
   useEffect(() => {
     const interval = setInterval(() => {
-      if (dailyChallengeStatus.completed && dailyChallengeStatus.completedAt) {
-        const now = new Date();
-        const todayStart = getTodayStart();
+      if (!dailyChallengeStatus.completed || dailyChallengeStatus.canPlay) {
+        return;
+      }
+
+      const now = new Date();
+      const todayStart = getTodayStart();
+
+      if (dailyChallengeStatus.completedAt) {
         const completedAt = new Date(dailyChallengeStatus.completedAt);
-        const completedDate = new Date(completedAt.getFullYear(), completedAt.getMonth(), completedAt.getDate());
-        
-        // Se mudou de dia, desbloquear
+        const completedDate = new Date(
+          completedAt.getFullYear(),
+          completedAt.getMonth(),
+          completedAt.getDate()
+        );
         if (completedDate.getTime() !== todayStart.getTime()) {
           console.log('🌅 Novo dia! Desbloqueando desafio diário...');
-          loadDailyChallengeStatus(); // Recarregar status para desbloquear
+          loadDailyChallengeStatus();
+          return;
         }
       }
-    }, 60000); // Verificar a cada 1 minuto
+
+      if (dailyChallengeStatus.nextAvailableAt) {
+        const nextAvailable = new Date(dailyChallengeStatus.nextAvailableAt);
+        if (now >= nextAvailable) {
+          loadDailyChallengeStatus();
+          return;
+        }
+        setDailyChallengeStatus((prev) => ({
+          ...prev,
+          timeRemaining: formatDailyChallengeCountdown(nextAvailable, now),
+        }));
+      }
+    }, 60000);
 
     return () => clearInterval(interval);
-  }, [dailyChallengeStatus.completed, dailyChallengeStatus.completedAt]);
+  }, [
+    dailyChallengeStatus.completed,
+    dailyChallengeStatus.completedAt,
+    dailyChallengeStatus.canPlay,
+    dailyChallengeStatus.nextAvailableAt,
+  ]);
 
   // ✅ FUNÇÃO PARA OBTER INÍCIO DO DIA ATUAL (meia-noite)
   const getTodayStart = (): Date => {
@@ -342,10 +369,55 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     return new Date(today.getTime() + 24 * 60 * 60 * 1000);
   };
 
+  const dailyChallengeStorageKey = (userId?: string | null) =>
+    userId ? `@NoteMusic:dailyChallenge:${userId}` : '@NoteMusic:dailyChallenge';
+
   // ✅ FUNÇÃO PARA CARREGAR STATUS DO DESAFIO DIÁRIO (baseado no DIA, não em 24h)
   const loadDailyChallengeStatus = async () => {
     try {
-      const stored = await AsyncStorage.getItem('@NoteMusic:dailyChallenge');
+      const email = user?.email?.trim().toLowerCase();
+      const storageKey = dailyChallengeStorageKey(user?.id);
+
+      // Liberar desafio para a conta de teste (force unlock v5 — limpa cooldown local também)
+      if (email === 'notemusicvirtuoso@gmail.com') {
+        const resetFlag = '@NoteMusic:dailyForceReset_virtuoso_v5';
+        const alreadyReset = await AsyncStorage.getItem(resetFlag);
+        if (!alreadyReset) {
+          await AsyncStorage.multiRemove([
+            '@NoteMusic:dailyChallenge',
+            storageKey,
+            '@NoteMusic:quizAttempts:daily-challenge:daily-challenge',
+            '@NoteMusic:quizAttempts:daily:daily',
+            '@NoteMusic:quizAttempts:daily-challenge-mock:daily-challenge-mock',
+            '@NoteMusic:dailyForceReset_virtuoso_20260711',
+            '@NoteMusic:dailyForceReset_virtuoso_20260711_v2',
+            '@NoteMusic:dailyForceReset_virtuoso_v3',
+            '@NoteMusic:dailyForceReset_virtuoso_v4',
+          ]);
+          await AsyncStorage.setItem(resetFlag, '1');
+          setDailyChallengeStatus({
+            completed: false,
+            completedAt: null,
+            nextAvailableAt: null,
+            canPlay: true,
+            timeRemaining: '',
+          });
+          console.log('🔄 Desafio diário liberado (v5) para', email);
+          return;
+        }
+      }
+
+      // Migrar chave antiga global → por usuário
+      let stored = await AsyncStorage.getItem(storageKey);
+      if (!stored && user?.id) {
+        const legacy = await AsyncStorage.getItem('@NoteMusic:dailyChallenge');
+        if (legacy) {
+          stored = legacy;
+          await AsyncStorage.setItem(storageKey, legacy);
+          await AsyncStorage.removeItem('@NoteMusic:dailyChallenge');
+        }
+      }
+
       const now = new Date();
       const todayStart = getTodayStart();
       
@@ -361,7 +433,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
           if (isCompletedToday) {
             // Completado hoje - bloquear até amanhã
             const nextAvailable = getTomorrowStart();
-            const timeRemaining = formatTimeRemaining(nextAvailable, now);
+            const timeRemaining = formatDailyChallengeCountdown(nextAvailable, now);
             
             setDailyChallengeStatus({
               completed: true,
@@ -380,7 +452,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
               timeRemaining: ''
             };
             
-            await AsyncStorage.setItem('@NoteMusic:dailyChallenge', JSON.stringify(resetStatus));
+            await AsyncStorage.setItem(storageKey, JSON.stringify(resetStatus));
             setDailyChallengeStatus(resetStatus);
           }
         } else {
@@ -416,16 +488,22 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     }
   };
 
-  // ✅ FUNÇÃO PARA FORMATAR TEMPO RESTANTE
-  const formatTimeRemaining = (nextAvailable: Date, now: Date): string => {
-    const diff = nextAvailable.getTime() - now.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+  const loadDailyChallengeMeta = async () => {
+    try {
+      const daily = await quizService.getDailyChallenge();
+      const questions =
+        daily.totalQuestions || daily.questions?.length || DAILY_CHALLENGE_DEFAULTS.questions;
+      const timeMinutes = daily.timeLimit
+        ? Math.max(1, Math.round(daily.timeLimit / 60))
+        : DAILY_CHALLENGE_DEFAULTS.timeMinutes;
+      setDailyChallengeMeta({ questions, timeMinutes });
+    } catch (error) {
+      console.warn('Não foi possível carregar meta do desafio diário:', error);
+      setDailyChallengeMeta({
+        questions: DAILY_CHALLENGE_DEFAULTS.questions,
+        timeMinutes: DAILY_CHALLENGE_DEFAULTS.timeMinutes,
+      });
     }
-    return `${minutes}m`;
   };
 
   // ✅ FUNÇÃO PARA MARCAR DESAFIO COMO COMPLETO (bloqueado até próxima meia-noite)
@@ -433,7 +511,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     try {
       const now = new Date();
       const nextAvailable = getTomorrowStart(); // Próxima meia-noite
-      const timeRemaining = formatTimeRemaining(nextAvailable, now);
+      const timeRemaining = formatDailyChallengeCountdown(nextAvailable, now);
       
       const status = {
         completed: true,
@@ -443,7 +521,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         timeRemaining
       };
       
-      await AsyncStorage.setItem('@NoteMusic:dailyChallenge', JSON.stringify(status));
+      await AsyncStorage.setItem(dailyChallengeStorageKey(user?.id), JSON.stringify(status));
       setDailyChallengeStatus(status);
       
       console.log('✅ Desafio diário completo! Próximo disponível à meia-noite:', nextAvailable.toISOString());
@@ -734,28 +812,33 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         <View style={styles.dailyChallengeCard}>
           <View style={styles.dailyChallengeHeader}>
             <MaterialCommunityIcons name="lightning-bolt" size={24} color="#FF8C00" />
-            <Text style={styles.dailyChallengeTitle}>Desafio do Dia</Text>
+            <Text style={styles.dailyChallengeTitle}>{DAILY_CHALLENGE_COPY.title}</Text>
           </View>
           
           <Text style={styles.dailyChallengeDesc}>
-            {!dailyChallengeStatus.canPlay 
-              ? 'Você já completou o desafio de hoje! Volte amanhã para um novo desafio.'
-              : 'Teste seus conhecimentos com questões especiais e ganhe pontos bônus para acelerar seu progresso!'
-            }
+            {!dailyChallengeStatus.canPlay
+              ? DAILY_CHALLENGE_COPY.blockedDesc
+              : DAILY_CHALLENGE_COPY.availableDesc}
           </Text>
           
           <View style={styles.dailyChallengeInfo}>
             <View style={styles.dailyChallengeInfoItem}>
               <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
-              <Text style={styles.dailyChallengeInfoText}>10 minutos</Text>
+              <Text style={styles.dailyChallengeInfoText}>
+                {dailyChallengeMeta.timeMinutes} min
+              </Text>
             </View>
             <View style={styles.dailyChallengeInfoItem}>
               <MaterialCommunityIcons name="help-circle-outline" size={16} color="#666" />
-              <Text style={styles.dailyChallengeInfoText}>5 questões</Text>
+              <Text style={styles.dailyChallengeInfoText}>
+                {dailyChallengeMeta.questions} questões
+              </Text>
             </View>
             <View style={styles.dailyChallengeInfoItem}>
               <MaterialCommunityIcons name="lightning-bolt" size={16} color="#666" />
-              <Text style={styles.dailyChallengeInfoText}>Desafio Único</Text>
+              <Text style={styles.dailyChallengeInfoText}>
+                {DAILY_CHALLENGE_COPY.oneAttempt}
+              </Text>
             </View>
           </View>
           
@@ -763,7 +846,9 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             <View style={styles.dailyChallengeTimer}>
               <MaterialCommunityIcons name="timer-outline" size={16} color="#FF9800" />
               <Text style={styles.dailyChallengeTimerText}>
-                Próximo desafio em: {dailyChallengeStatus.timeRemaining}
+                {DAILY_CHALLENGE_COPY.timerPrefix}: {dailyChallengeStatus.timeRemaining}
+                {' · '}
+                {DAILY_CHALLENGE_COPY.nextUnlock}
               </Text>
             </View>
           )}
@@ -775,11 +860,13 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             ]} 
             onPress={() => {
               if (dailyChallengeStatus.canPlay) {
-                console.log('🎯 Iniciando desafio diário...');
-                navigation.navigate('Quiz', { 
+                console.log('🎯 Abrindo intro do desafio diário...');
+                navigation.navigate('QuizIntroScreen', {
                   moduleId: 'daily-challenge',
+                  quizId: 'daily-challenge',
+                  quizTitle: DAILY_CHALLENGE_COPY.title,
                   isDailyChallenge: true,
-                  onComplete: markDailyChallengeCompleted
+                  onComplete: markDailyChallengeCompleted,
                 });
               }
             }}
@@ -1023,6 +1110,7 @@ const styles = StyleSheet.create({
     color: '#856404',
     marginLeft: 4,
     fontWeight: '600',
+    flexShrink: 1,
   },
   journeyStatusCard: {
     backgroundColor: '#FFF',

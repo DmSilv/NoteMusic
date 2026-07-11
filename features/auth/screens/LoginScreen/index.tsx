@@ -1,4 +1,5 @@
-import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Image, Alert, Switch } from 'react-native';
+﻿import { StyleSheet, View, Text, TouchableOpacity, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Image, Switch } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -93,7 +94,7 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const handleClearSavedCredentials = async () => {
-    Alert.alert(
+    appAlert(
       'Remover e-mail salvo',
       'Deseja remover o e-mail salvo? Você precisará digitá-lo novamente na próxima vez.',
       [
@@ -112,10 +113,10 @@ export default function LoginScreen({ navigation }: any) {
               setValue('email', '');
               setRememberMe(false);
               
-              Alert.alert('Pronto!', 'O e-mail salvo foi removido.');
+              appAlert('Pronto!', 'O e-mail salvo foi removido.');
             } catch (error) {
               console.error('Erro ao limpar credenciais:', error);
-              Alert.alert('Ops!', 'Não foi possível remover os dados salvos.');
+              appAlert('Ops!', 'Não foi possível remover os dados salvos.');
             }
           }
         }
@@ -134,7 +135,7 @@ export default function LoginScreen({ navigation }: any) {
       );
 
       if (result.requirePasswordChange) {
-        Alert.alert('Bem-vindo!', 'Por favor, altere sua senha temporária.');
+        appAlert('Bem-vindo!', 'Por favor, altere sua senha temporária.');
         navigation.navigate('ChangePassword');
         return;
       }
@@ -150,7 +151,7 @@ export default function LoginScreen({ navigation }: any) {
       // Oferece ativar biometria só quando o aparelho suporta e ela ainda não
       // está ativada — evita perguntar de novo a cada login.
       if (biometricHardwareAvailable && !biometricLoginEnabled) {
-        Alert.alert(
+        appAlert(
           `Entrar com ${biometricTypeLabel}?`,
           `Você pode usar ${biometricTypeLabel} para entrar mais rápido nas próximas vezes, sem digitar a senha.`,
           [
@@ -161,7 +162,7 @@ export default function LoginScreen({ navigation }: any) {
                 try {
                   await enableBiometricLogin();
                 } catch (biometricError: any) {
-                  Alert.alert('Ops!', biometricError.message || 'Não foi possível ativar a biometria.');
+                  appAlert('Ops!', biometricError.message || 'Não foi possível ativar a biometria.');
                 } finally {
                   goToProfileHome();
                 }
@@ -179,7 +180,7 @@ export default function LoginScreen({ navigation }: any) {
       }
 
       const processed = processError(error);
-      Alert.alert(processed.title, processed.message);
+      appAlert(processed.title, processed.message);
     }
   };
 
@@ -194,7 +195,7 @@ export default function LoginScreen({ navigation }: any) {
         routes: [{ name: 'ProfileHome' }],
       });
     } catch (error: any) {
-      Alert.alert('Não foi possível entrar', error.message || 'Tente novamente ou use sua senha.');
+      appAlert('Não foi possível entrar', error.message || 'Tente novamente ou use sua senha.');
     } finally {
       setIsBiometricLoginInProgress(false);
     }

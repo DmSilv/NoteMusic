@@ -11,10 +11,24 @@ export type RootStackParamList = {
   [ROUTES.ProfileHome]: undefined;
   [ROUTES.ProfileAccount]: undefined;
   [ROUTES.ModuleCategory]: undefined;
-  [ROUTES.Quiz]: { quizId: string; moduleId: string; level?: string };
+  [ROUTES.Quiz]: {
+    quizId?: string;
+    moduleId: string;
+    level?: string;
+    isDailyChallenge?: boolean;
+    onComplete?: () => void;
+    attemptStatus?: unknown;
+  };
   [ROUTES.QuizResults]: { quizId: string; moduleId: string; score?: number };
   [ROUTES.ContentListCategory]: { moduleId: string; moduleName?: string; level?: string };
-  [ROUTES.QuizIntroScreen]: { quizId?: string; moduleId: string; level?: string; quizTitle?: string };
+  [ROUTES.QuizIntroScreen]: {
+    quizId?: string;
+    moduleId: string;
+    level?: string;
+    quizTitle?: string;
+    isDailyChallenge?: boolean;
+    onComplete?: () => void;
+  };
   [ROUTES.ChangePassword]: undefined;
   [ROUTES.LevelStats]: undefined;
   [ROUTES.AccountDeletion]: undefined;

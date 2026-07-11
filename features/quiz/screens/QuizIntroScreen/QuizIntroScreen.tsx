@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import ChromeNavHeader from '@/shared/components/layout/ChromeNavHeader';
 import useLevelTheme from '@/shared/hooks/useLevelTheme';
@@ -14,6 +15,7 @@ import quizService from '@/services/quizService';
 import { Module } from '@/services/api';
 import { getLevelColors, formatLevelDisplay } from '@/shared/constants/theme';
 import { getCategoryDisplayName } from '@/shared/constants/CategoryNames';
+import { DAILY_CHALLENGE_COPY } from '@/shared/constants/dailyChallenge';
 
 interface QuizIntroScreenProps {
     navigation: NativeStackNavigationProp<any>;
@@ -37,6 +39,11 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
     const quizId = (route.params?.quizId as string | undefined) || moduleId;
     const paramLevel = route.params?.level as string | undefined;
     const paramQuizTitle = (route.params?.quizTitle as string | undefined) || 'Quiz';
+    const isDailyChallenge = route.params?.isDailyChallenge === true
+        || moduleId === 'daily-challenge'
+        || moduleId === 'daily'
+        || moduleId === 'daily-challenge-mock';
+    const onComplete = route.params?.onComplete as (() => void) | undefined;
 
     const [quizStatus, setQuizStatus] = useState<QuizStatus>({
         completed: false,
@@ -44,8 +51,8 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
         timeRemaining: '',
         attempts: {
             current: 0,
-            remaining: 2,
-            maxAttempts: 2
+            remaining: isDailyChallenge ? 1 : 2,
+            maxAttempts: isDailyChallenge ? 1 : 2
         },
         isOnCooldown: false
     });
@@ -55,11 +62,17 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
     const [quizData, setQuizData] = useState<any>(null);
     const [showFullTheory, setShowFullTheory] = useState(false);
 
-    const resolvedLevel = quizData?.level || moduleData?.level || paramLevel || null;
+    const resolvedLevel = isDailyChallenge
+        ? (paramLevel || 'aprendiz')
+        : (quizData?.level || moduleData?.level || paramLevel || null);
     const { level: themeLevel } = useLevelTheme(resolvedLevel);
 
-    const displayTitle = quizData?.title || moduleData?.title || paramQuizTitle;
-    const questionCount = quizData?.totalQuestions || quizData?.questions?.length || null;
+    const displayTitle = isDailyChallenge
+        ? (paramQuizTitle || 'Desafio do Dia')
+        : (quizData?.title || moduleData?.title || paramQuizTitle);
+    const questionCount = isDailyChallenge
+        ? (quizData?.totalQuestions || quizData?.questions?.length || 5)
+        : (quizData?.totalQuestions || quizData?.questions?.length || null);
     const moduleTheory =
         moduleData?.content && typeof moduleData.content === 'object' && !Array.isArray(moduleData.content)
             ? (moduleData.content as { theory?: string }).theory
@@ -96,32 +109,77 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
         setLoadError(null);
         setShowFullTheory(false);
         setIsLoading(true);
+
+        if (isDailyChallenge) {
+            loadDailyChallengeIntro();
+            return;
+        }
+
         loadQuizData();
         loadQuizStatus();
-    }, [moduleId]);
+    }, [moduleId, isDailyChallenge]);
 
-    // Timer para atualizar status a cada minuto (como no desafio diário)
+    // Timer para atualizar status a cada minuto (módulos normais)
     useEffect(() => {
+        if (isDailyChallenge) return;
         const interval = setInterval(() => {
             if (quizStatus.isOnCooldown) {
                 loadQuizStatus();
             }
-        }, 60000); // Verificar a cada 1 minuto
+        }, 60000);
 
         return () => clearInterval(interval);
-    }, [quizStatus.isOnCooldown]);
+    }, [quizStatus.isOnCooldown, isDailyChallenge]);
 
     // Recarregar status quando a tela receber foco
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
+            if (isDailyChallenge || !moduleId) return;
             console.log('🔄 QuizIntroScreen recebeu foco, atualizando status...');
-            if (moduleId) {
-                loadQuizStatus();
-            }
+            loadQuizStatus();
         });
 
         return unsubscribe;
-    }, [navigation, moduleId]);
+    }, [navigation, moduleId, isDailyChallenge]);
+
+    const loadDailyChallengeIntro = async () => {
+        try {
+            const daily = await quizService.getDailyChallenge();
+            setQuizData({
+                ...daily,
+                id: daily.id || 'daily-challenge',
+                title: daily.title || 'Desafio do Dia',
+                timeLimit: daily.timeLimit || 600,
+                totalQuestions: daily.questions?.length || 5,
+            });
+            setModuleData(null);
+            setQuizStatus({
+                completed: false,
+                canPlay: true,
+                timeRemaining: '',
+                attempts: { current: 0, remaining: 1, maxAttempts: 1 },
+                isOnCooldown: false,
+            });
+        } catch (error) {
+            console.error('❌ [QuizIntro] Erro ao carregar desafio diário:', error);
+            setQuizData({
+                id: 'daily-challenge',
+                title: 'Desafio do Dia',
+                timeLimit: 600,
+                totalQuestions: 5,
+                questions: [],
+            });
+            setQuizStatus({
+                completed: false,
+                canPlay: true,
+                timeRemaining: '',
+                attempts: { current: 0, remaining: 1, maxAttempts: 1 },
+                isOnCooldown: false,
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const loadQuizData = async () => {
         if (!moduleId) return;
@@ -226,6 +284,22 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
     };
 
     const handlePressQuizIntroScreen = async () => {
+        if (isDailyChallenge) {
+            try {
+                await quizAttemptService.resetQuizAttempts('daily-challenge', 'daily-challenge');
+                await quizAttemptService.resetQuizAttempts('daily', 'daily');
+                await quizAttemptService.resetQuizAttempts('daily-challenge-mock', 'daily-challenge-mock');
+            } catch {}
+            navigation.navigate('Quiz', {
+                moduleId: 'daily-challenge',
+                quizId: quizData?.id || 'daily-challenge',
+                isDailyChallenge: true,
+                onComplete,
+                level: resolvedLevel || undefined,
+            });
+            return;
+        }
+
         // VALIDAÇÃO TRIPLA: Verificar status em tempo real antes de permitir acesso
         try {
 
@@ -234,7 +308,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
             const completionStatus = await quizCompletionService.checkQuizCompletion(moduleId);
             if (completionStatus.isCompleted) {
 
-                Alert.alert(
+                appAlert(
                     'Quiz Concluído',
                     'Este quiz já foi completado com sucesso! Você pode revisar o conteúdo ou explorar outros módulos.',
                     [{ text: 'OK', style: 'default' }]
@@ -252,7 +326,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                     const timeStr = `${cooldownInfo.timeRemaining.minutes}:${cooldownInfo.timeRemaining.seconds.toString().padStart(2, '0')}`;
                     
 
-                    Alert.alert(
+                    appAlert(
                         'Quiz Bloqueado',
                         `Este quiz está bloqueado por ${timeStr} minutos.\n\nVocê esgotou suas tentativas. Aproveite para estudar e tente novamente em breve!`,
                         [{ text: 'OK', style: 'default' }]
@@ -260,7 +334,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                     return;
                 } else if (currentStatus.reason === 'max_attempts_reached') {
 
-                    Alert.alert(
+                    appAlert(
                         'Tentativas Esgotadas',
                         'Você esgotou suas tentativas para este quiz. O quiz ficará bloqueado por 30 minutos.\n\nAproveite para estudar e tente novamente em breve!',
                         [{ text: 'OK', style: 'default' }]
@@ -268,7 +342,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                     return;
                 } else {
 
-                    Alert.alert(
+                    appAlert(
                         'Quiz Indisponível',
                         'Este quiz não está disponível no momento. Tente novamente mais tarde.',
                         [{ text: 'OK', style: 'default' }]
@@ -282,7 +356,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
             if (cooldownInfo.isOnCooldown) {
                 const timeStr = `${cooldownInfo.timeRemaining.minutes}:${cooldownInfo.timeRemaining.seconds.toString().padStart(2, '0')}`;
 
-                Alert.alert(
+                appAlert(
                     'Quiz Bloqueado',
                     `Este quiz está bloqueado por ${timeStr} minutos.\n\nVocê esgotou suas tentativas. Aproveite para estudar e tente novamente em breve!`,
                     [{ text: 'OK', style: 'default' }]
@@ -301,7 +375,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
             
         } catch (error) {
 
-            Alert.alert(
+            appAlert(
                 'Erro de Verificação',
                 'Não foi possível verificar o status do quiz. Tente novamente mais tarde.',
                 [{ text: 'OK', style: 'default' }]
@@ -314,6 +388,9 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
     };
 
     const getButtonText = () => {
+        if (isDailyChallenge) {
+            return 'Começar desafio';
+        }
         if (quizStatus.completed) {
             return 'Concluído';
         }
@@ -481,7 +558,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
         );
     }
 
-    if (loadError || !moduleData || !quizData || !resolvedLevel) {
+    if (loadError || (!isDailyChallenge && (!moduleData || !quizData || !resolvedLevel))) {
         return (
             <LevelScreenShell level={paramLevel || themeLevel}>
                 <ChromeNavHeader>
@@ -499,8 +576,12 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                         <TouchableOpacity style={styles.retryButton} onPress={() => {
                             setIsLoading(true);
                             setLoadError(null);
-                            loadQuizData();
-                            loadQuizStatus();
+                            if (isDailyChallenge) {
+                                loadDailyChallengeIntro();
+                            } else {
+                                loadQuizData();
+                                loadQuizStatus();
+                            }
                         }}>
                             <Text style={styles.retryButtonText}>Tentar novamente</Text>
                         </TouchableOpacity>
@@ -510,13 +591,20 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
         );
     }
 
-    const difficultyLabel = getDifficultyLabel();
+    if (isDailyChallenge && !quizData) {
+        return null;
+    }
+
+    const difficultyLabel = isDailyChallenge ? null : getDifficultyLabel();
+    const dailyTimeMinutes = quizData?.timeLimit
+        ? Math.max(1, Math.floor(quizData.timeLimit / 60))
+        : 10;
 
     return (
-        <LevelScreenShell level={resolvedLevel}>
+        <LevelScreenShell level={resolvedLevel || themeLevel}>
             <ChromeNavHeader>
                 <View style={styles.backButtoncontainer}>
-                    <BackButton onPress={handlePressProfileHome} level={resolvedLevel} />
+                    <BackButton onPress={handlePressProfileHome} level={resolvedLevel || themeLevel} />
                 </View>
                 <UserInfo useRealTimeData={true} />
             </ChromeNavHeader>
@@ -524,16 +612,53 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
 
             <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
                 <View style={styles.intro}>
-                    <Text style={styles.pageTitle}>{displayTitle}</Text>
-                    {moduleData?.category && (
-                        <Text style={styles.pageSubtitle}>
-                            {getCategoryDisplayName(moduleData.category)}
-                        </Text>
+                    <Text style={styles.pageTitle}>
+                        {isDailyChallenge ? DAILY_CHALLENGE_COPY.title : displayTitle}
+                    </Text>
+                    {isDailyChallenge ? (
+                        <Text style={styles.pageSubtitle}>{DAILY_CHALLENGE_COPY.subtitle}</Text>
+                    ) : (
+                        moduleData?.category && (
+                            <Text style={styles.pageSubtitle}>
+                                {getCategoryDisplayName(moduleData.category)}
+                            </Text>
+                        )
                     )}
                 </View>
 
+                {isDailyChallenge && (
+                    <View style={styles.dailyWarningBox}>
+                        <MaterialCommunityIcons name="alert-circle-outline" size={22} color="#E65100" />
+                        <Text style={styles.dailyWarningText}>
+                            <Text style={styles.dailyWarningBold}>{DAILY_CHALLENGE_COPY.oneAttempt}.</Text>
+                            {' '}Sair no meio também conta.
+                        </Text>
+                    </View>
+                )}
+
                 {/* Informações do Quiz */}
                 <View style={styles.quizInfoContainer}>
+                    {isDailyChallenge ? (
+                        <>
+                            <View style={styles.infoRow}>
+                                <MaterialCommunityIcons name="lightning-bolt" size={16} color="#FF8C00" />
+                                <Text style={styles.infoText}>{DAILY_CHALLENGE_COPY.oneAttempt}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <MaterialCommunityIcons name="clock-outline" size={16} color="#0087D3" />
+                                <Text style={styles.infoText}>Tempo: {dailyTimeMinutes} min</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <MaterialCommunityIcons name="help-circle-outline" size={16} color="#0087D3" />
+                                <Text style={styles.infoText}>Questões: {questionCount}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <MaterialCommunityIcons name="calendar-clock" size={16} color="#0087D3" />
+                                <Text style={styles.infoText}>{DAILY_CHALLENGE_COPY.nextUnlock}</Text>
+                            </View>
+                        </>
+                    ) : (
+                        <>
                     <View style={styles.infoRow}>
                         <MaterialCommunityIcons name="book-open-page-variant" size={16} color="#0087D3" />
                         <Text style={styles.infoText}>Nível: {formatLevelDisplay(resolvedLevel)}</Text>
@@ -578,15 +703,21 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                             <Text style={styles.infoText}>Pontuação mínima: {quizData.passingScore}%</Text>
                         </View>
                     )}
+                        </>
+                    )}
                 </View>
 
             {/* Conteúdo do Módulo */}
-            <Text style={styles.sectionTitle}>Sobre este módulo:</Text>
+            <Text style={styles.sectionTitle}>
+                {isDailyChallenge ? 'Como funciona:' : 'Sobre este módulo:'}
+            </Text>
             <Text style={styles.description}>
-                {moduleData?.description || 'Este quiz testará seus conhecimentos sobre o tema abordado.'}
+                {isDailyChallenge
+                    ? DAILY_CHALLENGE_COPY.howItWorks
+                    : (moduleData?.description || 'Este quiz testará seus conhecimentos sobre o tema abordado.')}
             </Text>
             
-            {moduleTheory && (
+            {!isDailyChallenge && moduleTheory && (
                 <View style={styles.theoryContainer}>
                     <Text style={styles.theoryTitle}>📚 Conteúdo Teórico:</Text>
                     {renderFormattedTheory(moduleTheory)}
@@ -609,7 +740,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
             )}
 
             {/* Status do Quiz - apenas para quiz completado */}
-            {quizStatus.completed && (
+            {!isDailyChallenge && quizStatus.completed && (
                 <View style={styles.quizStatusContainer}>
                     <View style={styles.statusItem}>
                         <MaterialCommunityIcons name="check-circle" size={20} color="#43A047" />
@@ -621,7 +752,7 @@ const QuizIntroScreen: React.FC<QuizIntroScreenProps> = ({ navigation, route }) 
                 <TouchableOpacity 
                     style={getButtonStyle()} 
                     onPress={handlePressQuizIntroScreen}
-                    disabled={quizStatus.completed || quizStatus.isOnCooldown}
+                    disabled={!isDailyChallenge && (quizStatus.completed || quizStatus.isOnCooldown)}
                 >
                     <Text style={getButtonTextStyle()}>
                         {getButtonText()}
@@ -662,6 +793,28 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#999',
         fontFamily: 'Roboto-Light',
+    },
+    dailyWarningBox: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 10,
+        backgroundColor: '#FFF3E0',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#FF8C00',
+    },
+    dailyWarningText: {
+        flex: 1,
+        fontSize: 14,
+        lineHeight: 20,
+        color: '#E65100',
+        fontFamily: 'Roboto-Regular',
+    },
+    dailyWarningBold: {
+        fontFamily: 'Roboto-Medium',
+        fontWeight: '700',
     },
     sectionTitle: {
         fontSize: 18,

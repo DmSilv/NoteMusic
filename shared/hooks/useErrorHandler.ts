@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { Alert } from 'react-native';
+﻿import { useState, useCallback } from 'react';
+import { appAlert } from '@/shared/utils/appAlert';
 import { processError, createSuccessMessage, ErrorMessage } from '@/shared/utils/errorHandler';
 
 interface UseErrorHandlerReturn {
@@ -18,7 +18,7 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
     
     const errorInfo = processError(error);
     
-    Alert.alert(
+    appAlert(
       errorInfo.title,
       errorInfo.message,
       [
@@ -26,17 +26,19 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
           text: 'OK',
           style: errorInfo.type === 'warning' ? 'default' : 'destructive'
         }
-      ]
+      ],
+      { variant: errorInfo.type === 'warning' ? 'warning' : 'error' }
     );
   }, []);
 
   const showSuccess = useCallback((action: string) => {
     const successInfo = createSuccessMessage(action);
     
-    Alert.alert(
+    appAlert(
       successInfo.title,
       successInfo.message,
-      [{ text: 'OK', style: 'default' }]
+      [{ text: 'OK', style: 'default' }],
+      { variant: 'success' }
     );
   }, []);
 
@@ -45,7 +47,7 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
     message: string, 
     type: 'error' | 'warning' | 'info' = 'error'
   ) => {
-    Alert.alert(
+    appAlert(
       title,
       message,
       [
@@ -53,7 +55,8 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
           text: 'OK',
           style: type === 'warning' ? 'default' : type === 'error' ? 'destructive' : 'default'
         }
-      ]
+      ],
+      { variant: type }
     );
   }, []);
 

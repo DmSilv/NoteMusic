@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+﻿import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { appAlert } from '@/shared/utils/appAlert';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import useLevelTheme from '@/shared/hooks/useLevelTheme';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -283,7 +284,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         
         // Verificar se houve erro na sincronização
         if (submissionStatus.error) {
-            Alert.alert(
+            appAlert(
                 'Atenção',
                 'Houve problemas na sincronização dos seus resultados com o servidor. Seus resultados serão enviados automaticamente quando a conexão for restabelecida.',
                 [{ text: 'Entendi' }]
@@ -321,7 +322,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
         console.log('🔄 Tentando novamente o quiz');
         
         if (isLastAttempt) {
-            Alert.alert(
+            appAlert(
                 '⚠️ Última Tentativa!',
                 'Esta é sua última tentativa para este quiz. Após falhar, você terá que aguardar 30 minutos antes de tentar novamente. Deseja continuar?',
                 [
@@ -334,7 +335,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                 ]
             );
         } else {
-            Alert.alert(
+            appAlert(
                 '🔄 Tentar Novamente',
                 'Você tem 2 tentativas para este quiz. Deseja tentar novamente agora?',
                 [
