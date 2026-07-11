@@ -378,9 +378,9 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       const email = user?.email?.trim().toLowerCase();
       const storageKey = dailyChallengeStorageKey(user?.id);
 
-      // Liberar desafio para a conta de teste (force unlock v5 — limpa cooldown local também)
+      // Liberar desafio para a conta de teste (force unlock v6 — limpa cooldown local também)
       if (email === 'notemusicvirtuoso@gmail.com') {
-        const resetFlag = '@NoteMusic:dailyForceReset_virtuoso_v5';
+        const resetFlag = '@NoteMusic:dailyForceReset_virtuoso_v6';
         const alreadyReset = await AsyncStorage.getItem(resetFlag);
         if (!alreadyReset) {
           await AsyncStorage.multiRemove([
@@ -393,6 +393,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             '@NoteMusic:dailyForceReset_virtuoso_20260711_v2',
             '@NoteMusic:dailyForceReset_virtuoso_v3',
             '@NoteMusic:dailyForceReset_virtuoso_v4',
+            '@NoteMusic:dailyForceReset_virtuoso_v5',
           ]);
           await AsyncStorage.setItem(resetFlag, '1');
           setDailyChallengeStatus({
@@ -402,7 +403,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
             canPlay: true,
             timeRemaining: '',
           });
-          console.log('🔄 Desafio diário liberado (v5) para', email);
+          console.log('🔄 Desafio diário liberado (v6) para', email);
           return;
         }
       }
