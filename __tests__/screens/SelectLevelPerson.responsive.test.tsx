@@ -1,6 +1,8 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import SelectLevelPerson from '@/features/onboarding/screens/SelectLevelPerson/SelectLevelPerson';
+import SelectLevelPerson, {
+  PLAN_STEPS,
+} from '@/features/onboarding/screens/SelectLevelPerson/SelectLevelPerson';
 import {
   mockScreenPreset,
   restoreWindowDimensionsMock,
@@ -13,21 +15,30 @@ jest.mock('@/shared/components/layout/LevelScreenShell', () => {
   return ({ children }: { children: React.ReactNode }) => <View>{children}</View>;
 });
 
-describe('SelectLevelPerson responsividade', () => {
-  const navigation = { replace: jest.fn() };
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 'u1', level: 'aprendiz' },
+    updateUser: jest.fn(),
+  }),
+}));
+
+describe('SelectLevelPerson — plano de estudo', () => {
+  const navigation = { replace: jest.fn(), navigate: jest.fn() };
 
   afterEach(() => {
     restoreWindowDimensionsMock();
   });
 
-  it.each(SCREEN_CASES)('renderiza pergunta e opções em %s', (_label) => {
+  it.each(SCREEN_CASES)('renderiza primeira pergunta do plano em %s', (_label) => {
     mockScreenPreset(_label.includes('360') ? 'small' : _label.includes('390') ? 'medium' : 'large');
 
-    const { getByText } = render(<SelectLevelPerson navigation={navigation} />);
+    const { getByText, queryByText } = render(<SelectLevelPerson navigation={navigation} />);
 
-    expect(getByText('Passo 1 de 3')).toBeTruthy();
-    expect(getByText('Qual seu maior objetivo com teoria musical?')).toBeTruthy();
+    expect(getByText(`Etapa 1 de ${PLAN_STEPS.length}`)).toBeTruthy();
+    expect(getByText(PLAN_STEPS[0].question)).toBeTruthy();
     expect(getByText('Próximo')).toBeTruthy();
-    expect(getByText('Ler partituras com facilidade')).toBeTruthy();
+    expect(getByText('Piano ou teclado')).toBeTruthy();
+    // Aviso de alteração só na última tela
+    expect(queryByText(/alterar meta e foco depois/i)).toBeNull();
   });
 });

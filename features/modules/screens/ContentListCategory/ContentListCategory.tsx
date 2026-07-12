@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, ActivityIndicator, LayoutAnimation, UIManager, Platform, ScrollView } from 'react-native';
 import { appAlert } from '@/shared/utils/appAlert';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
@@ -252,8 +252,14 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         }
     };
 
-    const handlePressProfileHome = () => {
-        navigation.navigate('ModuleCategory');
+    const handlePressBack = () => {
+        // Plano de estudo: Home → lista → volta ao início
+        // Explorar categorias: Categorias → lista → volta às categorias
+        if (navigation.canGoBack()) {
+            navigation.goBack();
+            return;
+        }
+        navigation.navigate('ProfileHome');
     };
 
 
@@ -350,28 +356,11 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         }
     };
 
-    // Função para obter o motivo do bloqueio
-    const getLockReason = (moduleLevel?: string): string => {
+    // Função para verificar se um módulo está disponível (nível do usuário)
+    const isModuleAvailable = (moduleLevel?: string): boolean => {
         const userLevel = user?.level || 'aprendiz';
         const moduleLevelLower = moduleLevel?.toLowerCase() || 'aprendiz';
         
-        if (userLevel === 'aprendiz') {
-            if (moduleLevelLower === 'maestro') {
-                return 'Nível Maestro';
-            } else if (moduleLevelLower === 'virtuoso') {
-                return 'Nível Virtuoso';
-            }
-        }
-        
-        return 'Bloqueado';
-    };
-
-    // Função para verificar se um módulo está disponível
-    const isModuleAvailable = (index: number, isCompleted: boolean, moduleLevel?: string): boolean => {
-        const userLevel = user?.level || 'aprendiz';
-        const moduleLevelLower = moduleLevel?.toLowerCase() || 'aprendiz';
-        
-        // Hierarquia de níveis
         const levelHierarchy: { [key: string]: number } = {
             'aprendiz': 1,
             'virtuoso': 2,
@@ -381,19 +370,59 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         const userLevelValue = levelHierarchy[userLevel.toLowerCase()] || 1;
         const moduleLevelValue = levelHierarchy[moduleLevelLower] || 1;
         
-        // ✅ BLOQUEIO POR NÍVEL:
-        // Usuário só pode acessar módulos do seu nível ou inferiores
-        // Aprendiz (1): acessa apenas Aprendiz
-        // Virtuoso (2): acessa Aprendiz e Virtuoso
-        // Maestro (3): acessa todos
-        if (moduleLevelValue > userLevelValue) {
-            console.log(`🔒 Módulo "${moduleLevel}" bloqueado para usuário "${userLevel}"`);
-            return false;
-        }
-        
-        // ✅ Todos os módulos do mesmo nível ou inferior estão disponíveis
-        return true;
+        // Usuário só vê/acessa módulos do seu nível ou inferiores
+        return moduleLevelValue <= userLevelValue;
     };
+
+    const isModuleCompleted = (moduleId: string): boolean => {
+        const attempt = attemptStatus.get(moduleId);
+        return (
+            completionStatus.get(moduleId) === true ||
+            attempt?.reason === 'completed'
+        );
+    };
+
+    /** Disponíveis primeiro, cooldown no meio, concluídos por último. Bloqueados por nível ficam de fora. */
+    const visibleModules = useMemo(() => {
+        const available: Module[] = [];
+        const onCooldown: Module[] = [];
+        const completed: Module[] = [];
+
+        modules.forEach((module) => {
+            if (!isModuleAvailable(module.level)) {
+                return;
+            }
+
+            if (isModuleCompleted(module.id)) {
+                completed.push(module);
+                return;
+            }
+
+            const attempt = attemptStatus.get(module.id);
+            const cooling =
+                !!attempt?.attempts?.cooldownUntil &&
+                attempt.canAttempt === false &&
+                attempt.reason !== 'completed';
+
+            if (cooling) {
+                onCooldown.push(module);
+            } else {
+                available.push(module);
+            }
+        });
+
+        // Destaca o módulo do plano de estudo no topo dos disponíveis
+        const highlightId = route.params?.highlightModuleId as string | undefined;
+        if (highlightId) {
+            const idx = available.findIndex((m) => m.id === highlightId);
+            if (idx > 0) {
+                const [focused] = available.splice(idx, 1);
+                available.unshift(focused);
+            }
+        }
+
+        return [...available, ...onCooldown, ...completed];
+    }, [modules, completionStatus, attemptStatus, user?.level, route.params?.highlightModuleId]);
 
     const renderLesson = ({ item, index }: { item: Module; index: number }) => {
         const isCompleted = completionStatus.get(item.id) || false;
@@ -401,20 +430,21 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         const isCompletedLocally = attemptStatusForModule?.reason === 'completed';
         const isQuizCompleted = isCompleted || isCompletedLocally;
         
-        const isAvailable = isModuleAvailable(index, isQuizCompleted, item.level);
-        const isLocked = !isAvailable && !isQuizCompleted;
         const cooldownTimer = cooldownTimers.get(item.id);
         const isOnCooldown = attemptStatusForModule?.attempts.cooldownUntil && cooldownTimer;
         const remainingAttempts = attemptStatusForModule?.attempts.remaining || 2;
         const hasStatus = !!attemptStatusForModule;
-        // ✅ Só mostrar badge de tentativas se NÃO estiver em cooldown
-        const shouldShowAttemptsBadge = hasStatus && !isQuizCompleted && !isLocked && !isOnCooldown;
+        const shouldShowAttemptsBadge = hasStatus && !isQuizCompleted && !isOnCooldown;
+        const isHighlighted = route.params?.highlightModuleId === item.id;
         
         return (
             <View style={[
                 styles.lessonContainer,
                 isQuizCompleted && { backgroundColor: levelColors.secondary },
-                isLocked && { backgroundColor: '#F5F5F5', opacity: 0.7 }
+                isHighlighted && !isQuizCompleted && {
+                    borderColor: levelColors.primary,
+                    borderWidth: 2,
+                },
             ]}>
                 <View style={styles.headerlessonContainer}>
                     <MusicNoteIconBadge style={styles.lessonNoteBadge} />
@@ -422,17 +452,17 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                         <Text style={[
                             styles.lessonTitle,
                             isQuizCompleted && { color: levelColors.primary },
-                            isLocked && { color: '#666' }
                         ]}>
                             {item.title}
                         </Text>
-
+                        {isHighlighted && !isQuizCompleted ? (
+                            <Text style={[styles.focusBadge, { color: levelColors.primary }]}>
+                                Seu foco de estudo
+                            </Text>
+                        ) : null}
                     </View>
                 </View>
-                <Text style={[
-                    styles.lessonDescription,
-                    isLocked && { color: '#999' }
-                ]}>
+                <Text style={styles.lessonDescription}>
                     {item.description}
                 </Text>
                 <View style={styles.lessonFooter}>
@@ -446,7 +476,6 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                             </View>
                                             <Text style={styles.lessonTime}>
                                 {(() => {
-                                    // Calcular baseado no quiz se não tiver quizTimeLimit
                                     const timeLimit = item.quizTimeLimit || (item.quiz?.timeLimit) || ((item.quizzes && item.quizzes[0]?.timeLimit)) || null;
                                     return timeLimit ? `${Math.floor(timeLimit / 60)} min` : '5 min';
                                 })()}
@@ -486,24 +515,15 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                             style={[
                                 styles.startButton,
                                 { backgroundColor: levelColors.primary },
-                                isLocked && { backgroundColor: '#CCC' }
                             ]}
-                            onPress={() => {
-                                if (isLocked) return;
-                                handlePressQuizIntroScreen(item.id);
-                            }}
-                            disabled={isLocked}
+                            onPress={() => handlePressQuizIntroScreen(item.id)}
                         >
-                            <Text style={[
-                                styles.startButtonText,
-                                isLocked && { color: '#666' }
-                            ]}>
-                                {isLocked ? getLockReason(item.level) : 'Iniciar'}
+                            <Text style={styles.startButtonText}>
+                                Iniciar
                             </Text>
                         </TouchableOpacity>
                     )}
                     
-                    {/* Indicador visual de status - apenas para quiz completado */}
                     {hasStatus && isQuizCompleted && (
                         <View style={[
                             styles.statusIndicator,
@@ -524,7 +544,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             <LevelScreenShell level={userLevel}>
             <ChromeNavHeader>
                 <View style={styles.backButtoncontainer}>
-                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
+                    <BackButton onPress={handlePressBack} level={userLevel} />
                 </View>
                 <UserInfo useRealTimeData={true} />
             </ChromeNavHeader>
@@ -542,7 +562,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
         <LevelScreenShell level={userLevel}>
             <ChromeNavHeader>
                 <View style={styles.backButtoncontainer}>
-                    <BackButton onPress={handlePressProfileHome} level={userLevel} />
+                    <BackButton onPress={handlePressBack} level={userLevel} />
                 </View>
                 <UserInfo userName={user?.name || "Usuário"} userSubtitle={formatLevelDisplay(user?.level || "aprendiz")} />
             </ChromeNavHeader>
@@ -559,7 +579,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
                 />
                 <SubTitleComponent 
                     fontFamily={'Roboto-Light'} 
-                    subtitle={`${category?.modules?.length || modules?.length || 0} módulos disponíveis para estudo`} 
+                    subtitle={`${visibleModules.length} módulos para o seu nível`} 
                     color={''} 
                     marginRight={0} 
                     marginTop={6} 
@@ -567,7 +587,7 @@ const ModuleCategoryScreen: React.FC<ContentListCategoryProps> = ({ navigation, 
             </View>
 
             <FlatList
-                data={(modules || []).filter(Boolean)}
+                data={visibleModules}
                 renderItem={renderLesson}
                 keyExtractor={(item) => item.id}
                 showsVerticalScrollIndicator={false}
@@ -632,6 +652,13 @@ const styles = StyleSheet.create({
         fontWeight: 'light',
         flexShrink: 1,
         marginBottom: 12,
+    },
+    focusBadge: {
+        marginLeft: 10,
+        fontSize: 12,
+        fontWeight: '700',
+        marginTop: -8,
+        marginBottom: 8,
     },
     lessonDescription: {
         fontSize: 14,

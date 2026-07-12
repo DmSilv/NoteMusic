@@ -4,6 +4,7 @@ import apiService, { User, LoginData, RegisterData, UpdateUserData, normalizeUse
 import { processError } from '@/shared/utils/errorHandler';
 import { clearUserSessionCache } from '@/shared/utils/sessionCache';
 import * as biometricAuth from '@/shared/services/biometricAuth';
+import { cancelStudyReminders } from '@/shared/services/studyReminders';
 
 function devLog(...args: unknown[]) {
   if (__DEV__) {
@@ -237,6 +238,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
+    const loggingOutUserId = user?.id;
+
     try {
       await apiService.logout();
     } catch (error) {
@@ -244,6 +247,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
+      if (loggingOutUserId) {
+        await cancelStudyReminders(loggingOutUserId);
+      }
       await clearUserSessionCache();
       await AsyncStorage.removeItem('@NoteMusic:user');
       await AsyncStorage.removeItem('@NoteMusic:token');

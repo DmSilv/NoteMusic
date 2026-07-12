@@ -91,6 +91,7 @@ const QuizResults: React.FC<QuizResultsProps> = ({ navigation, route }) => {
                             percentage,
                             score: correctAnswers,
                             totalPoints: submitResult?.totalPoints,
+                            userId: user.id,
                         },
                         refreshUserProfile
                     );

@@ -52,6 +52,10 @@ export interface User {
   totalPoints?: number;
   weeklyProgress?: number;
   weeklyGoal?: number;
+  notifications?: {
+    email?: boolean;
+    push?: boolean;
+  };
 }
 
 /** Normaliza respostas da API ou dados salvos no storage para o formato User. */
@@ -89,6 +93,10 @@ export function normalizeUser(raw: unknown): User | null {
     weeklyProgress:
       typeof nested.weeklyProgress === 'number' ? nested.weeklyProgress : undefined,
     weeklyGoal: typeof nested.weeklyGoal === 'number' ? nested.weeklyGoal : undefined,
+    notifications:
+      nested.notifications && typeof nested.notifications === 'object'
+        ? (nested.notifications as User['notifications'])
+        : undefined,
   };
 }
 
@@ -110,6 +118,10 @@ export interface UpdateUserData {
   newPassword?: string;
   level?: string;
   weeklyGoal?: number;
+  notifications?: {
+    email?: boolean;
+    push?: boolean;
+  };
 }
 
 export interface Module {

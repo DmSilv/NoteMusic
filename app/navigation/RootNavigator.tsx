@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ROUTES } from './routes';
 import { RootStackParamList } from './types';
+import { navigationRef } from '@/shared/navigation/navigationRef';
 
 import SelectionScreen from '@/features/onboarding/screens/SelectionScreen/SelectionScreen';
 import LoginScreen from '@/features/auth/screens/LoginScreen';
@@ -27,7 +28,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ animation: 'slide_from_right' }}>
         <Stack.Screen name={ROUTES.SelectionScreen} component={SelectionScreen} options={{ headerShown: false }} />
         <Stack.Screen name={ROUTES.LoginScreen} component={LoginScreen} options={{ title: '', headerTransparent: true, headerTintColor: 'black', headerBackTitle: 'Voltar' }} />

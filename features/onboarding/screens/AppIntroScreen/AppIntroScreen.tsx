@@ -1,191 +1,264 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import LevelScreenShell from '@/shared/components/layout/LevelScreenShell';
 import ScreenScrollContainer from '@/shared/components/layout/ScreenScrollContainer';
-import PaginationDots from '@/shared/components/layout/PaginationDots/PaginationDots';
 import PrimaryButton from '@/shared/components/form/PrimaryButton/PrimaryButton';
-import TertiaryButton from '@/shared/components/form/TertiaryButton/TertiaryButton';
 import useResponsiveLayout from '@/shared/hooks/useResponsiveLayout';
-import { getLevelColors, AppTypography } from '@/shared/constants/theme';
+import useLevelTheme from '@/shared/hooks/useLevelTheme';
+import { AppTypography, getLevelColors } from '@/shared/constants/theme';
+import { logoNameImageStyles } from '@/shared/constants/logoNameLayout';
+import LogoName from '@/assets/images/LogoName.png';
 
 /**
- * Sequência curta de telas apresentando as principais funcionalidades do
- * app — substitui o mini quiz que era exibido logo após o cadastro. Não há
- * perguntas nem respostas aqui, apenas navegação por "Avançar"/"Voltar".
+ * Uma única tela introdutória após o cadastro:
+ * proposta do app + como funcionam os níveis.
+ * Em seguida o usuário monta o plano de estudo (SelectLevelPerson).
  */
-export const APP_INTRO_SLIDES: Array<{
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  title: string;
-  description: string;
-}> = [
-  {
-    icon: 'music-note',
-    title: 'Bem-vindo ao NoteMusic!',
-    description: 'Aprenda teoria musical de um jeito simples, prático e no seu próprio ritmo.',
-  },
-  {
-    icon: 'book-open-page-variant',
-    title: 'Módulos organizados por nível',
-    description: 'Estude por módulos, do básico ao avançado, evoluindo de Aprendiz até Maestro.',
-  },
-  {
-    icon: 'clipboard-check-outline',
-    title: 'Quizzes para testar seu conhecimento',
-    description: 'Responda quizzes ao final de cada módulo e veja o quanto você já aprendeu.',
-  },
-  {
-    icon: 'calendar-star',
-    title: 'Desafio Diário',
-    description: 'Todo dia um desafio novo, com perguntas diferentes, para manter sua prática em dia.',
-  },
-  {
-    icon: 'chart-line',
-    title: 'Acompanhe seu progresso',
-    description: 'Veja seus pontos, sua sequência de dias e sua evolução de nível direto no perfil.',
-  },
-];
+export const APP_INTRO_CONTENT = {
+  title: 'Como funciona o NoteMusic',
+  body:
+    'Você estuda teoria em módulos curtos, fixa com quizzes e acompanha o progresso no seu ritmo — sem precisar estudar tudo de uma vez.',
+  levelsTitle: 'Trilha de níveis',
+  levels: [
+    {
+      name: 'Aprendiz',
+      detail: 'Fundamentos — notas, figuras, compassos e dinâmica.',
+    },
+    {
+      name: 'Virtuoso',
+      detail: 'Desbloqueia após completar os módulos de Aprendiz.',
+    },
+    {
+      name: 'Maestro',
+      detail: 'Conteúdo avançado, ao concluir a trilha Virtuoso.',
+    },
+  ],
+  footer:
+    'No próximo passo montamos seu plano com base no que você toca, no seu nível e no tempo que tem.',
+};
 
 interface AppIntroScreenProps {
   navigation: any;
 }
 
 export default function AppIntroScreen({ navigation }: AppIntroScreenProps) {
-  const [step, setStep] = useState(0);
-  const { horizontalPadding, formFieldWidth, height: windowHeight, isCompactHeight } = useResponsiveLayout();
-  const levelColors = getLevelColors('aprendiz');
+  const { horizontalPadding, formFieldWidth, isCompactHeight, height } = useResponsiveLayout();
+  const { chrome } = useLevelTheme('aprendiz');
+  const logoHeight = Math.min(height * 0.26, isCompactHeight ? 210 : 250);
 
-  const isFirstSlide = step === 0;
-  const isLastSlide = step === APP_INTRO_SLIDES.length - 1;
-  const currentSlide = APP_INTRO_SLIDES[step];
-
-  const iconCircleSize = Math.min(Math.max(windowHeight * 0.18, 120), 180);
-
-  const handleNext = () => {
-    if (isLastSlide) {
-      navigation.replace('ProfileHome');
-      return;
-    }
-    setStep((prev) => Math.min(prev + 1, APP_INTRO_SLIDES.length - 1));
-  };
-
-  const handleBack = () => {
-    setStep((prev) => Math.max(prev - 1, 0));
+  const goToPlan = () => {
+    navigation.replace('SelectLevelPerson');
   };
 
   return (
-    <LevelScreenShell>
-      <ScreenScrollContainer
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingHorizontal: horizontalPadding },
-        ]}
-      >
-        <View style={styles.slideContent}>
-          <View
-            style={[
-              styles.iconCircle,
-              {
-                width: iconCircleSize,
-                height: iconCircleSize,
-                borderRadius: iconCircleSize / 2,
-                backgroundColor: levelColors.secondary,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name={currentSlide.icon}
-              size={iconCircleSize * 0.5}
-              color={levelColors.primary}
-            />
+    <LevelScreenShell level="aprendiz">
+      <View style={styles.container}>
+        <ScreenScrollContainer
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: horizontalPadding },
+          ]}
+        >
+          <View style={styles.brandBlock}>
+            <View
+              style={[
+                styles.logoClip,
+                {
+                  width: formFieldWidth,
+                  height: logoHeight * 0.48,
+                },
+              ]}
+            >
+              <Image
+                source={LogoName}
+                style={[
+                  logoNameImageStyles.image,
+                  styles.logo,
+                  {
+                    width: formFieldWidth,
+                    height: logoHeight,
+                    marginTop: -(logoHeight * 0.26),
+                  },
+                ]}
+                resizeMode="contain"
+                accessibilityLabel="NoteMusic"
+              />
+            </View>
+
+            <Text
+              style={[
+                styles.title,
+                { color: chrome.primary, fontSize: isCompactHeight ? 20 : 22 },
+              ]}
+            >
+              {APP_INTRO_CONTENT.title}
+            </Text>
+
+            <Text
+              style={[
+                styles.description,
+                {
+                  width: formFieldWidth,
+                  fontSize: isCompactHeight ? 15 : 16,
+                  lineHeight: isCompactHeight ? 22 : 24,
+                },
+              ]}
+            >
+              {APP_INTRO_CONTENT.body}
+            </Text>
           </View>
 
-          <Text
-            style={[
-              styles.title,
-              { color: levelColors.primary, fontSize: isCompactHeight ? 20 : 22 },
-            ]}
-          >
-            {currentSlide.title}
+          <View style={[styles.card, { width: formFieldWidth }]}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="stairs" size={22} color={chrome.primary} />
+              <Text style={styles.cardTitle}>{APP_INTRO_CONTENT.levelsTitle}</Text>
+            </View>
+
+            {APP_INTRO_CONTENT.levels.map((level, index) => {
+              const levelColors = getLevelColors(level.name);
+              const isLast = index === APP_INTRO_CONTENT.levels.length - 1;
+              return (
+                <View
+                  key={level.name}
+                  style={[styles.levelRow, isLast && styles.levelRowLast]}
+                >
+                  <View style={[styles.levelIcon, { backgroundColor: levelColors.secondary }]}>
+                    <MaterialCommunityIcons
+                      name="music-note"
+                      size={18}
+                      color={levelColors.primary}
+                    />
+                  </View>
+                  <View style={styles.levelText}>
+                    <Text style={[styles.levelName, { color: levelColors.primary }]}>
+                      {level.name}
+                    </Text>
+                    <Text style={styles.levelDetail}>{level.detail}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.footerHint, { width: formFieldWidth }]}>
+            {APP_INTRO_CONTENT.footer}
           </Text>
 
-          <Text style={[styles.description, { width: formFieldWidth }]}>
-            {currentSlide.description}
-          </Text>
-        </View>
-
-        <View style={styles.footer}>
-          <PaginationDots
-            total={APP_INTRO_SLIDES.length}
-            currentIndex={step}
-            activeColor={levelColors.primary}
-          />
-
-          <View style={styles.buttonsRow}>
-            {isFirstSlide ? (
-              <View style={styles.backButtonPlaceholder} />
-            ) : (
-              <TertiaryButton
-                title="Voltar"
-                onPress={handleBack}
-                styleWidth={{ width: formFieldWidth * 0.42 }}
-              />
-            )}
+          <View style={[styles.footer, { width: formFieldWidth }]}>
             <PrimaryButton
-              title={isLastSlide ? 'Começar' : 'Avançar'}
-              onPress={handleNext}
-              styleWidth={{ width: formFieldWidth * 0.42 }}
+              title="Montar meu plano"
+              onPress={goToPlan}
+              styleWidth={{ width: formFieldWidth }}
               style={styles.primaryButtonOverride}
             />
           </View>
-        </View>
-      </ScreenScrollContainer>
+        </ScreenScrollContainer>
+      </View>
     </LevelScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'space-between',
-    paddingTop: 24,
-    paddingBottom: 16,
-  },
-  slideContent: {
-    flexGrow: 1,
+    paddingTop: 8,
+    paddingBottom: 28,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  iconCircle: {
+  brandBlock: {
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
+    marginBottom: 8,
+  },
+  logoClip: {
+    overflow: 'hidden',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  logo: {
+    alignSelf: 'center',
   },
   title: {
     fontFamily: AppTypography.family.bold,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   description: {
-    fontFamily: AppTypography.family.light,
-    fontSize: AppTypography.size.md,
+    fontFamily: AppTypography.family.regular,
     color: '#545454',
     textAlign: 'center',
-    lineHeight: 22,
+    marginBottom: 12,
   },
-  footer: {
-    width: '100%',
-    alignItems: 'center',
+  card: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E8EEF2',
   },
-  buttonsRow: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 16,
+    gap: 8,
+    marginBottom: 12,
   },
-  backButtonPlaceholder: {
-    flexGrow: 0,
+  cardTitle: {
+    flex: 1,
+    fontFamily: AppTypography.family.bold,
+    fontSize: 16,
+    color: '#232323',
+  },
+  levelRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  levelRowLast: {
+    marginBottom: 4,
+  },
+  levelIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  levelText: {
+    flex: 1,
+  },
+  levelName: {
+    fontFamily: AppTypography.family.bold,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  levelDetail: {
+    fontFamily: AppTypography.family.light,
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+  },
+  footerHint: {
+    fontFamily: AppTypography.family.light,
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 18,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 'auto',
+    paddingTop: 4,
   },
   primaryButtonOverride: {
     marginTop: 0,

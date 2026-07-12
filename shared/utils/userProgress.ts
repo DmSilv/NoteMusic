@@ -2,6 +2,7 @@ import apiService from '@/services/api';
 import quizCompletionService from '@/services/quizCompletionService';
 import quizService from '@/services/quizService';
 import { clearAllUserDataCache } from '@/shared/hooks/useUserData';
+import { noteStudyActivity } from '@/shared/services/studyReminders';
 
 export interface QuizSubmitSyncInput {
   moduleId: string;
@@ -10,6 +11,7 @@ export interface QuizSubmitSyncInput {
   percentage: number;
   score: number;
   totalPoints?: number;
+  userId?: string;
 }
 
 /**
@@ -39,7 +41,7 @@ export async function syncProgressAfterQuizSubmit(
   input: QuizSubmitSyncInput,
   refreshUserProfile: () => Promise<void>
 ): Promise<{ moduleCompleted: boolean; profileRefreshed: boolean }> {
-  const { moduleId, quizId, passed, percentage, score } = input;
+  const { moduleId, quizId, passed, percentage, score, userId } = input;
 
   console.log('🔄 [ProgressSync] Iniciando sincronização pós-quiz:', {
     moduleId,
@@ -80,6 +82,14 @@ export async function syncProgressAfterQuizSubmit(
     quizCompletionService.markQuizAsCompleted(moduleId, completionData);
     if (quizId !== moduleId) {
       quizCompletionService.markQuizAsCompleted(quizId, completionData);
+    }
+  }
+
+  if (passed && userId) {
+    try {
+      await noteStudyActivity(userId);
+    } catch (error) {
+      console.warn('⚠️ [ProgressSync] Não foi possível registrar horário de estudo:', error);
     }
   }
 

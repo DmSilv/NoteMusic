@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import AppIntroScreen, { APP_INTRO_SLIDES } from '@/features/onboarding/screens/AppIntroScreen/AppIntroScreen';
+import AppIntroScreen, { APP_INTRO_CONTENT } from '@/features/onboarding/screens/AppIntroScreen/AppIntroScreen';
 import {
   mockScreenPreset,
   restoreWindowDimensionsMock,
@@ -13,6 +13,12 @@ jest.mock('@/shared/components/layout/LevelScreenShell', () => {
   return ({ children }: { children: React.ReactNode }) => <View>{children}</View>;
 });
 
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 'u1', level: 'aprendiz' },
+  }),
+}));
+
 describe('AppIntroScreen', () => {
   const buildNavigation = () => ({ replace: jest.fn(), navigate: jest.fn() });
 
@@ -20,52 +26,26 @@ describe('AppIntroScreen', () => {
     restoreWindowDimensionsMock();
   });
 
-  it.each(SCREEN_CASES)('renderiza o primeiro slide sem perguntas em %s', (_label) => {
+  it.each(SCREEN_CASES)('mostra a proposta do app e os níveis em %s', (_label) => {
     mockScreenPreset(_label.includes('360') ? 'small' : _label.includes('390') ? 'medium' : 'large');
     const navigation = buildNavigation();
 
-    const { getByText, queryByText } = render(<AppIntroScreen navigation={navigation as any} />);
+    const { getByText } = render(<AppIntroScreen navigation={navigation as any} />);
 
-    expect(getByText(APP_INTRO_SLIDES[0].title)).toBeTruthy();
-    expect(getByText(APP_INTRO_SLIDES[0].description)).toBeTruthy();
-    expect(getByText('Avançar')).toBeTruthy();
-    // Não deve haver botão "Voltar" no primeiro slide.
-    expect(queryByText('Voltar')).toBeNull();
+    expect(getByText(APP_INTRO_CONTENT.title)).toBeTruthy();
+    expect(getByText(APP_INTRO_CONTENT.levelsTitle)).toBeTruthy();
+    expect(getByText('Aprendiz')).toBeTruthy();
+    expect(getByText('Virtuoso')).toBeTruthy();
+    expect(getByText('Maestro')).toBeTruthy();
+    expect(getByText('Montar meu plano')).toBeTruthy();
   });
 
-  it('avança entre os slides ao pressionar "Avançar" e mostra "Voltar" a partir do segundo', () => {
-    const navigation = buildNavigation();
-    const { getByText, queryByText } = render(<AppIntroScreen navigation={navigation as any} />);
-
-    fireEvent.press(getByText('Avançar'));
-
-    expect(getByText(APP_INTRO_SLIDES[1].title)).toBeTruthy();
-    expect(queryByText('Voltar')).toBeTruthy();
-  });
-
-  it('volta ao slide anterior ao pressionar "Voltar"', () => {
+  it('navega para SelectLevelPerson ao continuar', () => {
     const navigation = buildNavigation();
     const { getByText } = render(<AppIntroScreen navigation={navigation as any} />);
 
-    fireEvent.press(getByText('Avançar'));
-    expect(getByText(APP_INTRO_SLIDES[1].title)).toBeTruthy();
+    fireEvent.press(getByText('Montar meu plano'));
 
-    fireEvent.press(getByText('Voltar'));
-    expect(getByText(APP_INTRO_SLIDES[0].title)).toBeTruthy();
-  });
-
-  it('exibe "Começar" no último slide e navega para ProfileHome ao concluir', () => {
-    const navigation = buildNavigation();
-    const { getByText } = render(<AppIntroScreen navigation={navigation as any} />);
-
-    for (let i = 0; i < APP_INTRO_SLIDES.length - 1; i += 1) {
-      fireEvent.press(getByText('Avançar'));
-    }
-
-    expect(getByText(APP_INTRO_SLIDES[APP_INTRO_SLIDES.length - 1].title)).toBeTruthy();
-    const finishButton = getByText('Começar');
-    fireEvent.press(finishButton);
-
-    expect(navigation.replace).toHaveBeenCalledWith('ProfileHome');
+    expect(navigation.replace).toHaveBeenCalledWith('SelectLevelPerson');
   });
 });

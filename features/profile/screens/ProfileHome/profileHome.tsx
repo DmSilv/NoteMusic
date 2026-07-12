@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, BackHandler, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import MenuBottom, { getMenuBottomHeight } from '@/shared/components/layout/MenuBottom';
@@ -20,6 +20,19 @@ import {
   DAILY_CHALLENGE_DEFAULTS,
   formatDailyChallengeCountdown,
 } from '@/shared/constants/dailyChallenge';
+import {
+  StudyFocus,
+  getStudyFocus,
+  buildCategoryNavParam,
+} from '@/shared/utils/studyFocus';
+import {
+  hasRevealedThisWeek,
+  markWeekRevealed,
+  clearWeekReveal,
+} from '@/shared/utils/lobbyStatsReveal';
+
+/** DEV: limpa revelação do Bruno uma vez por sessão do Metro (para retestar capas). */
+let didResetBrunoLobbyReveal = false;
 
 // ✅ INTERFACE PARA CONTROLE DE DESAFIO DIÁRIO
 interface DailyChallengeStatus {
@@ -54,98 +67,115 @@ function getLevelBadge(level: string): { color: string; icon: keyof typeof Mater
   };
 }
 
-// ✅ FUNÇÃO PARA CALCULAR STATUS DA SEQUÊNCIA (STREAK)
+// Sequência: número claro + próximo passo (sem emoji)
 function getStreakStatus(userStats: UserStats | null, accentColor: string) {
   const currentStreak = userStats?.currentStreak || userStats?.streak || 0;
   const lastStudyDate = userStats?.recentActivity?.lastStudyDate;
-  
-  // Verificar se estudou hoje
+  const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'fire';
+
   const today = new Date().toDateString();
   const lastStudy = lastStudyDate ? new Date(lastStudyDate).toDateString() : null;
   const studiedToday = lastStudy === today;
-  
-  let description = 'Dias consecutivos';
-  let icon: keyof typeof MaterialCommunityIcons.glyphMap = 'fire';
-  
+
+  let description = 'Estude hoje';
   if (currentStreak === 0) {
-    description = 'Comece hoje!';
+    description = 'Estude hoje';
   } else if (studiedToday) {
-    description = '✅ Ativo hoje';
+    description = 'Mantida hoje';
   } else {
-    description = 'Dias seguidos';
+    description = 'Estude hoje para manter';
   }
-  
+
   return {
     value: `${currentStreak} ${currentStreak === 1 ? 'dia' : 'dias'}`,
     icon,
     description,
-    color: accentColor
+    color: accentColor,
   };
 }
 
-// ✅ FUNÇÃO PARA CALCULAR STATUS DOS MÓDULOS COMPLETOS (requisitos para avançar)
+// Módulos: progresso para o próximo nível (levelProgress da API)
 function getModulesStatus(userStats: UserStats | null, accentColor: string) {
   const completedModules = userStats?.completedModules || 0;
   const userLevel = userStats?.level?.toLowerCase() || 'aprendiz';
   const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'book-check';
-  
-  // Definir REQUISITOS para avançar (não o total de módulos)
-  const requirementsByLevel: Record<string, number> = {
-    'aprendiz': 16,   // Precisa completar 16 para ser Virtuoso
-    'virtuoso': 32,   // Precisa completar 32 total para ser Maestro
-    'maestro': 42     // Já completou todos (42 módulos total)
+
+  const modulesProgress = userStats?.levelProgress?.modulesProgress;
+  const nextLevel = userStats?.levelProgress?.next;
+
+  const fallbackRequired: Record<string, number> = {
+    aprendiz: 16,
+    virtuoso: 32,
+    maestro: 42,
   };
-  
-  const requiredModules = requirementsByLevel[userLevel] || 16;
-  
-  let description = 'Módulos completos';
-  
-  if (completedModules >= requiredModules) {
-    description = '🎉 Nível completo!';
-  } else if (completedModules >= requiredModules * 0.8) {
-    description = 'Quase lá!';
-  } else if (completedModules >= requiredModules * 0.5) {
-    description = 'Muito bem!';
-  } else if (completedModules >= requiredModules * 0.25) {
-    description = 'Progredindo';
-  } else if (completedModules > 0) {
-    description = 'Continue assim';
+
+  const current = modulesProgress?.current ?? completedModules;
+  const required = modulesProgress?.required ?? fallbackRequired[userLevel] ?? 16;
+  const remaining = Math.max(0, required - current);
+  const isMaestro = userLevel === 'maestro' || !nextLevel;
+
+  let description: string;
+  if (isMaestro || remaining === 0) {
+    description =
+      completedModules > 0 ? `${completedModules} concluídos` : 'Nível completo';
+  } else if (nextLevel) {
+    description = `Faltam ${remaining} para ${nextLevel}`;
   } else {
-    description = 'Complete módulos';
+    description = remaining > 0 ? `Faltam ${remaining}` : 'Nível completo';
   }
-  
+
   return {
-    value: `${completedModules}/${requiredModules}`,
+    value: isMaestro && !modulesProgress?.required
+      ? `${completedModules}`
+      : `${current}/${required}`,
     icon,
     description,
-    color: accentColor
+    color: accentColor,
   };
 }
 
-// ✅ FUNÇÃO PARA CALCULAR TAXA DE APROVAÇÃO
+// Aprovação: — sem histórico; senão % + contexto útil
 function getPassRateStatus(userStats: UserStats | null, accentColor: string) {
-  const passRate = userStats?.quizPassRate || 0;
+  const passRate = userStats?.quizPassRate ?? 0;
+  const quizzesLast7Days = userStats?.recentActivity?.quizzesLast7Days ?? 0;
+  const completedModules = userStats?.completedModules || 0;
   const icon: keyof typeof MaterialCommunityIcons.glyphMap = 'chart-line';
-  
-  let description = 'Taxa de aprovação';
-  
-  if (passRate >= 90) {
-    description = 'Excelente!';
-  } else if (passRate >= 70) {
-    description = 'Muito bom';
-  } else if (passRate >= 50) {
-    description = 'Continue!';
-  } else if (passRate > 0) {
-    description = 'Pratique mais';
-  } else {
-    description = 'Faça quizzes';
+
+  // Sem quizzes feitos: 0% parece falha — mostrar traço
+  const neverAttempted = passRate === 0 && quizzesLast7Days === 0 && completedModules === 0;
+
+  if (neverAttempted) {
+    return {
+      value: '—',
+      icon,
+      description: 'Sem quizzes ainda',
+      color: accentColor,
+    };
   }
-  
+
+  let description: string;
+  if (passRate >= 90) {
+    description =
+      quizzesLast7Days > 0
+        ? `${quizzesLast7Days} ${quizzesLast7Days === 1 ? 'quiz' : 'quizzes'} na semana`
+        : 'Excelente';
+  } else if (passRate >= 50) {
+    description =
+      quizzesLast7Days > 0
+        ? `${quizzesLast7Days} ${quizzesLast7Days === 1 ? 'quiz' : 'quizzes'} na semana`
+        : 'Bom ritmo';
+  } else if (passRate > 0) {
+    description = 'Revise e tente de novo';
+  } else {
+    // Taxa 0 mas já tem atividade (ex.: só módulos / falhou quizzes)
+    description = 'Revise e tente de novo';
+  }
+
   return {
     value: `${Math.round(passRate)}%`,
     icon,
     description,
-    color: accentColor
+    color: accentColor,
   };
 }
 
@@ -171,6 +201,16 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     questions: DAILY_CHALLENGE_DEFAULTS.questions,
     timeMinutes: DAILY_CHALLENGE_DEFAULTS.timeMinutes,
   });
+  const [studyFocus, setStudyFocusState] = useState<StudyFocus | null>(null);
+  const [openingPlan, setOpeningPlan] = useState(false);
+  const [statsRevealReady, setStatsRevealReady] = useState(false);
+  /** Quantos cards já tiveram a capa deslizada (0–3). */
+  const [revealedCount, setRevealedCount] = useState(0);
+  const coverAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
   
   // Animação sutil para o badge de nível
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -197,6 +237,59 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     return () => pulse.stop();
   }, [pulseAnim]);
 
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setStatsRevealReady(false);
+
+      (async () => {
+        if (!user?.id) {
+          if (!cancelled) {
+            setRevealedCount(0);
+            coverAnims.forEach((v) => v.setValue(0));
+            setStatsRevealReady(true);
+          }
+          return;
+        }
+
+        const isBruno =
+          `${user.email || ''} ${user.name || ''}`.toLowerCase().includes('bruno');
+
+        if (__DEV__ && isBruno && !didResetBrunoLobbyReveal) {
+          didResetBrunoLobbyReveal = true;
+          await clearWeekReveal(user.id);
+        }
+
+        const revealed = await hasRevealedThisWeek(user.id);
+        if (cancelled) return;
+        setRevealedCount(revealed ? 3 : 0);
+        coverAnims.forEach((v) => v.setValue(revealed ? 1 : 0));
+        setStatsRevealReady(true);
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id, coverAnims])
+  );
+
+  const revealNextCard = useCallback(() => {
+    if (!statsRevealReady || !user?.id || revealedCount >= 3) return;
+
+    const idx = revealedCount;
+    Animated.timing(coverAnims[idx], {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+
+    const next = idx + 1;
+    setRevealedCount(next);
+    if (next >= 3) {
+      markWeekRevealed(user.id).catch(() => {});
+    }
+  }, [statsRevealReady, user?.id, revealedCount, coverAnims]);
+
   useEffect(() => {
     if (!user?.id) {
       setUserStats(null);
@@ -218,7 +311,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
     loadUserData();
     loadDailyChallengeStatus();
-    loadDailyChallengeMeta();
+    // Meta do desafio: só no focus (evita 2× GET /daily-challenge em paralelo)
   }, [user?.id]);
 
   // ✅ Estado para rastrear se a tela está focada
@@ -305,6 +398,7 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
       loadUserData(forceRefresh);
       loadDailyChallengeStatus();
       loadDailyChallengeMeta();
+      getStudyFocus(user.id).then(setStudyFocusState);
 
       if (forceRefresh) {
         navigation.setParams({ forceRefresh: undefined });
@@ -489,7 +583,11 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     }
   };
 
+  const dailyMetaInFlight = useRef(false);
+
   const loadDailyChallengeMeta = async () => {
+    if (dailyMetaInFlight.current) return;
+    dailyMetaInFlight.current = true;
     try {
       const daily = await quizService.getDailyChallenge();
       const questions =
@@ -504,6 +602,8 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         questions: DAILY_CHALLENGE_DEFAULTS.questions,
         timeMinutes: DAILY_CHALLENGE_DEFAULTS.timeMinutes,
       });
+    } finally {
+      dailyMetaInFlight.current = false;
     }
   };
 
@@ -655,6 +755,28 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
     }
   };
 
+  const openStudyPlan = async () => {
+    // Sem foco escolhido → abre o plano para escolher
+    if (!studyFocus) {
+      navigation.navigate('LevelStats');
+      return;
+    }
+
+    try {
+      setOpeningPlan(true);
+      const category = await buildCategoryNavParam(studyFocus);
+      navigation.navigate('ContentListCategory', {
+        category,
+        highlightModuleId: studyFocus.moduleId,
+      });
+    } catch (error) {
+      console.error('Erro ao abrir plano de estudo:', error);
+      navigation.navigate('LevelStats');
+    } finally {
+      setOpeningPlan(false);
+    }
+  };
+
   const { chrome } = useLevelTheme(user?.level ?? userStats?.level);
   const displayLevel = userStats?.level ?? user?.level;
 
@@ -716,21 +838,21 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
 
   const stats = [
     {
-      label: 'Sequência Ativa',
+      label: 'Sequência',
       value: streakStatus.value,
       icon: streakStatus.icon,
       description: streakStatus.description,
       color: streakStatus.color,
     },
     {
-      label: 'Módulos Completos',
+      label: 'Módulos',
       value: modulesStatus.value,
       icon: modulesStatus.icon,
       description: modulesStatus.description,
       color: modulesStatus.color,
     },
     {
-      label: 'Taxa de Sucesso',
+      label: 'Aprovação',
       value: passRateStatus.value,
       icon: passRateStatus.icon,
       description: passRateStatus.description,
@@ -782,17 +904,85 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
           </View>
         </View>
 
-        {/* Cards de evolução */}
-        <View style={[styles.statsRow, isCompact && styles.statsRowCompact]}>
-          {stats.map((stat, idx) => (
-            <View key={idx} style={[styles.statCard, isCompact && styles.statCardCompact, { borderTopColor: stat.color }]}> 
-              <MaterialCommunityIcons name={stat.icon} size={isCompact ? 26 : 32} color={stat.color} style={{ marginBottom: isCompact ? 4 : 8 }} />
-              <Text style={[styles.statValue, isCompact && styles.statValueCompact]}>{stat.value}</Text>
-              <Text style={[styles.statLabel, isCompact && styles.statLabelCompact]}>{stat.label}</Text>
-              <Text style={[styles.statDesc, isCompact && styles.statDescCompact]}>{stat.description}</Text>
-            </View>
-          ))}
-        </View>
+        {/* Cards de evolução — capa sólida desliza a cada toque */}
+        <Pressable
+          onPress={revealedCount >= 3 ? undefined : revealNextCard}
+          disabled={revealedCount >= 3 || !statsRevealReady}
+          accessibilityRole={revealedCount >= 3 ? 'summary' : 'button'}
+          accessibilityLabel={
+            revealedCount >= 3
+              ? 'Resumo da semana'
+              : `Toque para revelar o próximo card (${revealedCount + 1} de 3)`
+          }
+          style={[styles.statsRow, isCompact && styles.statsRowCompact]}
+        >
+          {stats.map((stat, idx) => {
+            const cover = coverAnims[idx];
+            const isNext = idx === revealedCount && revealedCount < 3;
+
+            return (
+              <View
+                key={stat.label}
+                style={[
+                  styles.statCard,
+                  isCompact && styles.statCardCompact,
+                  { borderTopColor: stat.color },
+                ]}
+              >
+                <View style={styles.statCardInner}>
+                  <MaterialCommunityIcons
+                    name={stat.icon}
+                    size={isCompact ? 26 : 32}
+                    color={stat.color}
+                    style={{ marginBottom: isCompact ? 4 : 8 }}
+                  />
+                  <Text style={[styles.statLabel, isCompact && styles.statLabelCompact]}>
+                    {stat.label}
+                  </Text>
+                  <Text style={[styles.statValue, isCompact && styles.statValueCompact]}>
+                    {stat.value}
+                  </Text>
+                  <Text style={[styles.statDesc, isCompact && styles.statDescCompact]}>
+                    {stat.description}
+                  </Text>
+                </View>
+
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.statCover,
+                    {
+                      backgroundColor: stat.color,
+                      opacity: cover.interpolate({
+                        inputRange: [0, 0.75, 1],
+                        outputRange: [1, 1, 0],
+                      }),
+                      transform: [
+                        {
+                          translateY: cover.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, -130],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={stat.icon}
+                    size={isCompact ? 28 : 34}
+                    color="#FFF"
+                    style={{ marginBottom: 8 }}
+                  />
+                  <Text style={styles.statCoverLabel}>{stat.label}</Text>
+                  {isNext ? (
+                    <Text style={styles.statCoverHint}>Toque</Text>
+                  ) : null}
+                </Animated.View>
+              </View>
+            );
+          })}
+        </Pressable>
 
 
 
@@ -807,6 +997,38 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
         >
           <MaterialCommunityIcons name="apps" size={22} color="#FFF" style={{ marginRight: 10 }} />
           <Text style={styles.categoryButtonText}>Explorar Categorias</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.planCard, { borderColor: chrome.primary }]}
+          onPress={openStudyPlan}
+          activeOpacity={0.85}
+          disabled={openingPlan}
+          accessibilityRole="button"
+          accessibilityLabel={
+            studyFocus
+              ? `Plano de estudo: ${studyFocus.moduleTitle}`
+              : 'Plano de estudo'
+          }
+        >
+          <View style={[styles.planIconWrap, { backgroundColor: `${chrome.primary}18` }]}>
+            {openingPlan ? (
+              <ActivityIndicator color={chrome.primary} />
+            ) : (
+              <MaterialCommunityIcons
+                name="book-open-page-variant"
+                size={22}
+                color={chrome.primary}
+              />
+            )}
+          </View>
+          <View style={styles.planTextBlock}>
+            <Text style={styles.planCardLabel}>Plano de estudo</Text>
+            <Text style={[styles.planCardModule, { color: chrome.primary }]} numberOfLines={2}>
+              {studyFocus?.moduleTitle || 'Escolher próximo foco'}
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={22} color={chrome.primary} />
         </TouchableOpacity>
 
         {/* Card de Desafio Diário */}
@@ -848,8 +1070,6 @@ export default function ProfileHome({ navigation }: ProfileHomeProps) {
               <MaterialCommunityIcons name="timer-outline" size={16} color="#FF9800" />
               <Text style={styles.dailyChallengeTimerText}>
                 {DAILY_CHALLENGE_COPY.timerPrefix}: {dailyChallengeStatus.timeRemaining}
-                {' · '}
-                {DAILY_CHALLENGE_COPY.nextUnlock}
               </Text>
             </View>
           )}
@@ -967,6 +1187,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07,
     shadowRadius: 6,
     minHeight: 120,
+    overflow: 'hidden',
+  },
+  statCardInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  statCover: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  statCoverLabel: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  statCoverHint: {
+    marginTop: 8,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    fontWeight: '600',
   },
   statCardCompact: {
     paddingVertical: 14,
@@ -1020,11 +1265,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#0087D3',
     borderRadius: 12,
     paddingVertical: 16,
-    marginBottom: 28,
+    marginBottom: 10,
     marginTop: 0,
     elevation: 2,
     width: '100%',
     alignSelf: 'center',
+  },
+  planCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7FAFC',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 28,
+    width: '100%',
+    alignSelf: 'center',
+    gap: 12,
+  },
+  planIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  planCardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7A86',
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  planCardModule: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 21,
   },
   categoryButtonText: {
     color: '#FFF',
